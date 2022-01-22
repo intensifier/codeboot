@@ -10,9 +10,19 @@ const codebootCharts = (function () {
     },
   };
 
-  // register vega and vega-lite with the API
   vl.register(vega, vegaLite, vegaLiteOptions);
 
+  // This function is to be called from Python using the FFI.
+  // data: a list of lists with data[0] being column names
+  // markType: 'line', 'bar' or 'point'
+  // title: mandatory, but can be ''
+  // xDesc: 'field_name:field_type'.
+  //        field_type is either 'timestamp', 'unix_timestamp' or empty.
+  //        'timestamp' treats the data as temporal
+  //        'unix_timestamp' does the same, scaling by 1000
+  //        empty refers to a quantitative value
+  // yDesc: 'field_name:field_type', same as xDesc.
+  // zDesc: 'field_name', treats z dimension as a color for multi-line charts.
   function plot(data, markType, title, xDesc, yDesc, zDesc) {
     var chart = document.getElementsByClassName('cb-html-window')[0];
 
