@@ -13,26 +13,43 @@ const codebootCharts = (function () {
   // register vega and vega-lite with the API
   vl.register(vega, vegaLite, vegaLiteOptions);
 
-  function drawLine(csv, xDesc, yDesc) {
+  function plot(data, markType, title, xDesc, yDesc, zDesc) {
     var chart = document.getElementsByClassName('cb-html-window')[0];
 
-    var data = csv_to_vega(csv);
+    var _data = list_conv(data);
 
+    // Handle chart type
+    var mark;
+
+    if (markType === "line") {
+      mark = vl.markLine;
+    } else if (markType === "bar") {
+      mark = vl.markBar;
+    } else if (markType === "point") {
+      mark = vl.markPoint;
+    }
+
+    // Handle axis types
     var xField, xTooltip, xLabel, xType;
     var yField, yTooltip, yLabel, yType;
+    var zField, zTooltip, zLabel, zType;
 
     [xLabel, xType] = xDesc.split(':');
     [yLabel, yType] = yDesc.split(':');
 
     if (xType === "unix_timestamp") {
       // Scale to 1000x
-      data.forEach(e => {
+      _data.forEach(e => {
         e[xLabel] = 1000 * e[xLabel];
       })
 
       xField = vl.x().fieldT(xLabel);
       xTooltip = vl.fieldT(xLabel);
-    } else {
+    } else if (xType === "timestamp") {
+      xField = vl.x().fieldT(xLabel);
+      xTooltip = vl.fieldT(xLabel);
+    }
+    else {
       xField = vl.x().fieldQ(xLabel);
       xTooltip = vl.fieldQ(xLabel);
     }
@@ -94,7 +111,6 @@ const codebootCharts = (function () {
   }
 
   return {
-    csv_to_vega,
-    drawLine
+    plot
   }
 })();
