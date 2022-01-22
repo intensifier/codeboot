@@ -41,33 +41,52 @@ const codebootCharts = (function () {
     yField = vl.y().fieldQ(yLabel);
     yTooltip = vl.fieldQ(yLabel);
 
+    // TODO: handle optional zType
+    if (zDesc !== undefined) {
+      [zLabel, zType] = zDesc.split(':');
+      zField = vl.color().fieldN(zLabel);
+      zTooltip = vl.fieldN(zLabel);
+    }
+
+    var encodeArgs;
+    if (zDesc === undefined) {
+      encodeArgs = [xField,
+                    yField,
+                    vl.tooltip([xTooltip, yTooltip])];
+    } else {
+      encodeArgs = [xField,
+                    yField,
+                    zField,
+                    vl.tooltip([xTooltip, yTooltip, zTooltip])];
+    }
+
+    // Handle chart title
+    if (title === undefined) {
+      title = "";
+    }
+
     // Clear the last chart
     chart.innerHTML = "";
 
-    vl.markLine({ tooltip: true })
-      .data(data)
-      .encode(
-        xField,
-        yField,
-        vl.tooltip([xTooltip, yTooltip])
-      )
+    mark({ tooltip: true })
+      .title(title)
+      .data(_data)
+      .encode(...encodeArgs)
       .render()
       .then(viewElement => {
         chart.appendChild(viewElement);
       });
 
+    return 1;
   }
 
-  function csv_to_vega(csv) {
-    var _csv = csv.split('\n');
-    var cols = _csv[0].split(',');
-
-    var rows = [];
-    _csv.slice(1).forEach(row => {
-      _row = row.split(',');
+  function list_conv(data) {
+    var cols = data[0];
+    rows = [];
+    data.slice(1).forEach(row => {
       var d = {};
-      cols.forEach((field, i) => {
-        d[field] = Number(_row[i]);
+      cols.forEach((e, i) => {
+        d[e] = row[i];
       });
       rows.push(d);
     })
