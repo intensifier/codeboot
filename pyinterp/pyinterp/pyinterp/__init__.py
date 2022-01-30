@@ -391,6 +391,12 @@ class OM_csv_reader(OM_object):
     dialect
     """
 
+class OM_csv_writer(OM_object):
+    """
+    lines: lines iterator
+    dialect
+    """
+
 class OM_csv_dialect(OM_object):
     """
     delimiter
@@ -1539,6 +1545,10 @@ def populate_builtin_csv_reader():
     builtin_add_method(class_csv_reader, '__iter__', om_csv_reader_iter)
     builtin_add_method(class_csv_reader, '__next__', om_csv_reader_next)
 
+def populate_builtin_csv_writer():
+    builtin_add_method(class_csv_writer, 'writerow', om_csv_writer_writerow)
+    builtin_add_method(class_csv_writer, 'writerows', om_csv_writer_writerows)
+
 def object_class(o):
     if om_is(o, om_None):
         # This is equivalent to javascript bool
@@ -1694,6 +1704,13 @@ def om_csv_reader(cls, line_num, line_iterator, dialect):
 
     return obj
 
+def om_csv_writer(cls, write_method, dialect):
+    obj = om(cls)
+    OM_set_csv_writer_write_method(obj, write_method)
+    OM_set_csv_writer_dialect(obj, dialect)
+
+    return obj
+
 def om_csv_dialect(cls, delimiter, doublequote, escapechar, lineterminator,
                    quotechar, quoting, skipinitialspace, strict):
     obj = om(cls)
@@ -1762,6 +1779,10 @@ def om_isinstance(obj, cls):
 
 def om_has_type(obj, cls):
     return om_is(OM_get_object_class(obj), cls)
+
+def om_isnumeric(obj):
+    cls = OM_get_object_class(obj)
+    return om_issubclass(cls, class_int) or om_issubclass(cls, class_float)
 
 # Creation of om object from class
 def OM_object_create():
@@ -1838,6 +1859,9 @@ def OM_TextIOWrapper_create():
 
 def OM_csv_reader_create():
     return OM_csv_reader()
+
+def OM_csv_writer_create():
+    return OM_csv_writer()
 
 def OM_csv_dialect_create():
     return OM_csv_dialect()
@@ -2146,6 +2170,20 @@ def OM_get_csv_reader_dialect(o):
     return o.dialect
 
 def OM_set_csv_reader_dialect(o, dialect):
+    o.dialect = dialect
+
+# csv writer
+
+def OM_get_csv_writer_write_method(o):
+    return o.write_method
+
+def OM_set_csv_writer_write_method(o, write_method):
+    o.write_method = write_method
+
+def OM_get_csv_writer_dialect(o):
+    return o.dialect
+
+def OM_set_csv_writer_dialect(o, dialect):
     o.dialect = dialect
 
 # csv dialect
@@ -2470,7 +2508,8 @@ class_TextIOWrapper = make_stdlib_class('TextIOWrapper', "_io", OM_TextIOWrapper
 
 # _csv classes, TODO: put in an _csv module
 class_csv_reader = make_stdlib_class('reader', "_csv", OM_csv_reader_create, ())
-class_csv_dialect = make_stdlib_class('Dialect', "_csv", OM_csv_reader_create, ())
+class_csv_writer = make_stdlib_class('writer', "_csv", OM_csv_writer_create, ())
+class_csv_dialect = make_stdlib_class('Dialect', "_csv", OM_csv_dialect_create, ())
 
 # class available and populated in 'more_builtins' module
 class_struct = make_builtin_class('struct', OM_struct_create, ())
@@ -3318,9 +3357,17 @@ def om_TextIOWrapper_write(ctx, args):
                 if is_write_truncate_mode(mode):
                     name = OM_get_TextIOWrapper_name(self)
 
+                    # current content
+                    current_content = runtime_read_file(ctx.rte, name)
+
+                    pointer = OM_get_TextIOWrapper_pointer(self)
+                    new_content = current_content[:pointer] + content_value
+
+                    OM_set_TextIOWrapper_pointer(self, len(new_content))
+
                     # TODO: cPython on Linux does not recreate file if it was deleted
                     # is that expected or quirk of my OS?
-                    runtime_write_file(ctx.rte, name, content_value)
+                    runtime_write_file(ctx.rte, name, new_content)
 
                     # TODO: we should in fact return the number of written bytes
                     # fix that once we have a better filesystem in codeBoot?
@@ -3378,6 +3425,11 @@ def om_csv_parse_line(ctx, self, init_line, fetch_line):
     strict = OM_get_dialect_strict(dialect)
 
     must_cast_unquoted = quoting == csv_param_quote_nonnumeric
+    quote_none = quoting == csv_param_quote_none
+
+    if quote_none:
+        # quotechar is no longer considered a special char when no quoting is allowed
+        quotechar = None
 
     def all_lineterminators(s, start, stop):
         while start < stop:
@@ -3570,6 +3622,185 @@ def om_csv_reader_next(ctx, args):
                           lambda rte: sem_raise(ctx, class_StopIteration))
     else:
         return sem_raise_with_message(ctx, class_TypeError, "expected 0 argument, got " + str(len(args) - 1))
+
+# class _csv.writer
+def csv_element_quoted(text, delimiter, lineterminator, quotechar, doublequote):
+    i = 0
+    text_len = len(text)
+
+    while i < text_len:
+        c = text[i]
+
+        if c == quotechar and doublequote:
+            return True
+        elif c == delimiter or string_contains(lineterminator, c):
+            return True
+        i += 1
+
+    return False
+
+def om_csv_format_element(ctx, text, delimiter, doublequote, escapechar, lineterminator,
+                           quotechar, must_quote, must_not_quote):
+
+    need_to_escape_msg = "need to escape, but no escapechar set"
+
+    text_len = len(text)
+    line_terminator_len = len(lineterminator)
+
+    def append_escaped(c):
+        if escapechar is None:
+            return False
+        else:
+            chars.append(escapechar + c)
+            return True
+
+    # Decide beforehand if the element will have to be quoted
+    # if the element must not be quoted, any character which need to be escaped will generate and exception
+    if must_quote:
+        quoted = True
+    elif must_not_quote:
+        quoted = False
+    else:
+        quoted = csv_element_quoted(text, delimiter, lineterminator, quotechar, doublequote) or must_quote
+
+    chars = []
+
+    if quoted:
+        chars.append(quotechar)
+
+    i = 0
+
+    while i < text_len:
+        c = text[i]
+
+        # Check if requires escape
+        if c == delimiter or string_contains(lineterminator, c):
+            if quoted:
+                chars.append(c)
+            elif not append_escaped(c):
+                return sem_raise_with_message(ctx, class_csv_Error, need_to_escape_msg)
+        elif c == quotechar:
+            if quoted:
+                if doublequote:
+                    chars.append(quotechar + quotechar)
+                elif not append_escaped(quotechar):
+                    return sem_raise_with_message(ctx, class_csv_Error, need_to_escape_msg)
+            elif not append_escaped(quotechar):
+                return sem_raise_with_message(ctx, class_csv_Error, need_to_escape_msg)
+        elif c == escapechar:
+            chars.append(escapechar + escapechar)
+        else:
+            chars.append(c)
+
+        i += 1
+
+    if quoted:
+        chars.append(quotechar)
+
+    formatted_string = string_join("", chars)
+
+    return cont_obj(ctx, formatted_string)
+
+def om_csv_write_one_row(ctx, row, write_method, delimiter, doublequote, escapechar, lineterminator,
+                         quotechar, quote_all, quote_nonumeric, quote_none):
+
+    def write_result(rte, formatted_strings):
+        text_to_write = string_join(delimiter, formatted_strings) + lineterminator
+        return sem_simple_call(with_rte(ctx, rte), write_method, [om_str(text_to_write)])
+
+    def parse_elements(rte, strings_data):
+        # data contains pairs of string and boolean indicating whether the element was a numeric
+        def parse_string(ctx, data):
+            s = data[0]
+            must_quote = quote_all or quote_nonumeric and not data[1] # data[1] <- isnumeric
+
+            return om_csv_format_element(ctx, s, delimiter, doublequote, escapechar,
+                                         lineterminator, quotechar, must_quote, quote_none)
+        if len(strings_data) == 1 and len(strings_data[0][0]) == 0:
+            if quote_none or quotechar is None:
+                return sem_raise_with_message(ctx, class_csv_Error, "single empty field record must be quoted")
+            else:
+                return write_result(ctx.rte, [quotechar + quotechar])
+        else:
+            return cps_map(with_cont(ctx, write_result), parse_string, strings_data)
+
+    def extract_element(ctx, val):
+        def cont(rte, val_as_str):
+            str_value = OM_get_boxed_value(val_as_str)
+            return cont_obj(ctx, [str_value, om_isnumeric(val)])
+
+        if om_is(val, om_None):
+            return cont_obj(ctx, ["", False])
+        else:
+            return sem_str(with_cont(ctx, cont), val)
+
+    def catch_TypeError(exc):
+        if om_isinstance(exc, class_TypeError):
+            return sem_raise_with_message(ctx, class_csv_Error, "iterable expected")
+        else:
+            return sem_raise_unsafe(ctx.rte, exc)
+
+    def cont(rte, iterator):
+        return om_unpack_map_iterator(with_cont(ctx, parse_elements), extract_element, iterator)
+
+    return sem_iter(with_cont_and_catch(ctx, cont, catch_TypeError), row)
+
+def om_csv_writer_writerow(ctx, args):
+    if len(args) == 2:
+        self = args[0]
+        row = args[1]
+
+        dialect = OM_get_csv_writer_dialect(self)
+        write_method = OM_get_csv_writer_write_method(self)
+
+        delimiter = OM_get_dialect_delimiter(dialect)
+        doublequote = OM_get_dialect_doublequote(dialect)
+        escapechar = OM_get_dialect_escapechar(dialect)
+        lineterminator = OM_get_dialect_lineterminator(dialect) # TODO: ignored, '\n' and '\r' are hardcoded
+        quotechar = OM_get_dialect_quotechar(dialect)
+        quoting = OM_get_dialect_quoting(dialect)
+
+        quote_all = quoting == csv_param_quote_all
+        # no need to compute
+        # quote_minial = quoting == csv_param_quote_minial
+        quote_nonumeric = quoting == csv_param_quote_nonnumeric
+        quote_none = quoting == csv_param_quote_none
+
+        return om_csv_write_one_row(ctx, row, write_method, delimiter, doublequote, escapechar, lineterminator,
+                                    quotechar, quote_all, quote_nonumeric, quote_none)
+
+    else:
+        return sem_raise_with_message(ctx, class_TypeError, "expected 1 argument, got " + str(len(args) - 1))
+
+def om_csv_writer_writerows(ctx, args):
+    if len(args) == 2:
+        self = args[0]
+        rows = args[1]
+
+        dialect = OM_get_csv_writer_dialect(self)
+        write_method = OM_get_csv_writer_write_method(self)
+
+        delimiter = OM_get_dialect_delimiter(dialect)
+        doublequote = OM_get_dialect_doublequote(dialect)
+        escapechar = OM_get_dialect_escapechar(dialect)
+        lineterminator = OM_get_dialect_lineterminator(dialect) # TODO: ignored, '\n' and '\r' are hardcoded
+        quotechar = OM_get_dialect_quotechar(dialect)
+        quoting = OM_get_dialect_quoting(dialect)
+
+        quote_all = quoting == csv_param_quote_all
+        # no need to compute
+        # quote_minial = quoting == csv_param_quote_minial
+        quote_nonumeric = quoting == csv_param_quote_nonnumeric
+        quote_none = quoting == csv_param_quote_none
+
+        def write_one_row(ctx, row):
+            return om_csv_write_one_row(with_cont(ctx, lambda rte, _: cont_no_val(ctx)), row, write_method, delimiter, doublequote, escapechar, lineterminator,
+                                        quotechar, quote_all, quote_nonumeric, quote_none)
+
+        return om_foreach_iterable(with_cont(ctx, lambda rte: cont_obj(ctx, om_None)), write_one_row, rows)
+
+    else:
+        return sem_raise_with_message(ctx, class_TypeError, "expected 1 argument, got " + str(len(args) - 1))
 
 # class_NotImplementedType
 def om_format_NotImplementedType(self, rte):
@@ -5307,7 +5538,6 @@ def cps_map(ctx, fn, lst):
             return cont_obj(ctx, new_lst)
 
     return do_next(0)
-
 
 def om_map_new_code(ctx, args):
     args_len = len(args)
@@ -7807,6 +8037,7 @@ populate_builtin_NotImplementedType()
 populate_builtin_MethodWrapper()
 populate_builtin_TextIOWrapper()
 populate_builtin_csv_reader()
+populate_builtin_csv_writer()
 
 # Basic type and date structure.
 populate_builtin_int()
@@ -8688,108 +8919,134 @@ def make_module_csv():
     dict_set(module_csv_env, "QUOTE_NONNUMERIC", QUOTE_NONNUMERIC)
     dict_set(module_csv_env, "QUOTE_NONE", QUOTE_NONE)
 
-    def reader_code(rte, cont):
-        csvfile = rte_lookup_locals(rte, "csvfile")
-        dialect = rte_lookup_locals(rte, "dialect")
-        delimiter = rte_lookup_locals(rte, "delimiter")
-        doublequote = rte_lookup_locals(rte, "doublequote")
-        escapechar = rte_lookup_locals(rte, "escapechar")
-        lineterminator = rte_lookup_locals(rte, "lineterminator")
-        quotechar = rte_lookup_locals(rte, "quotechar")
-        quoting = rte_lookup_locals(rte, "quoting")
-        skipinitialspace = rte_lookup_locals(rte, "skipinitialspace")
-        strict = rte_lookup_locals(rte, "strict")
+    def do_reader_writer_code(check_csvfile, create_csv_object):
+        def code(rte, cont):
+            csvfile = rte_lookup_locals(rte, "csvfile")
+            dialect = rte_lookup_locals(rte, "dialect")
+            delimiter = rte_lookup_locals(rte, "delimiter")
+            doublequote = rte_lookup_locals(rte, "doublequote")
+            escapechar = rte_lookup_locals(rte, "escapechar")
+            lineterminator = rte_lookup_locals(rte, "lineterminator")
+            quotechar = rte_lookup_locals(rte, "quotechar")
+            quoting = rte_lookup_locals(rte, "quoting")
+            skipinitialspace = rte_lookup_locals(rte, "skipinitialspace")
+            strict = rte_lookup_locals(rte, "strict")
 
-        def create_reader(reader_rte, it):
-            # Check for dialect
-            # TODO: we ignore dialect
-            if not om_isinstance(dialect, class_str):
-                return sem_raise_with_message(make_out_of_ast_context(reader_rte, None), class_TypeError, "dialect must be a string")
-            else:
-                dialect_value = OM_get_boxed_value(dialect)
-
-            # check for delimiter
-            if not om_isinstance(delimiter, class_str) or len(OM_get_boxed_value(delimiter)) != 1:
-                return sem_raise_with_message(make_out_of_ast_context(reader_rte, None), class_TypeError, "delimiter must be a 1-character string")
-            else:
-                delimiter_value = OM_get_boxed_value(delimiter)
-
-            def after_doublequote(dq_rte, doublequote_as_bool):
-                # doublequote truthiness is tested
-                doublequote_value = True if om_is(doublequote_as_bool, om_True) else False
-
-                # check for escape char
-                if om_is(escapechar, om_None):
-                    escapechar_value = None
-                elif om_isinstance(escapechar, class_str) and len(OM_get_boxed_value(delimiter)) == 1:
-                    escapechar_value = OM_get_boxed_value(escapechar)
+            def create_object(reader_rte, csvfile_transformation):
+                # Check for dialect
+                # TODO: we ignore dialect
+                if not om_isinstance(dialect, class_str):
+                    return sem_raise_with_message(make_out_of_ast_context(reader_rte, None), class_TypeError, "dialect must be a string")
                 else:
-                    return sem_raise_with_message(make_out_of_ast_context(dq_rte, None), class_TypeError, "escapechar must be a string or None")
+                    dialect_value = OM_get_boxed_value(dialect)
 
-                # check for lineterminator
-                # TODO: we ignore lineterminator since even cPython 3.8 seems to ignore it
-                # https://docs.python.org/3.8/library/csv.html#csv.Dialect.lineterminator
-                if not om_isinstance(lineterminator, class_str):
-                    return sem_raise_with_message(make_out_of_ast_context(dq_rte, None), class_TypeError, "lineterminator must be a string")
+                # check for delimiter
+                if not om_isinstance(delimiter, class_str) or len(OM_get_boxed_value(delimiter)) != 1:
+                    return sem_raise_with_message(make_out_of_ast_context(reader_rte, None), class_TypeError, "delimiter must be a 1-character string")
                 else:
-                    lineterminator_value = OM_get_boxed_value(lineterminator)
+                    delimiter_value = OM_get_boxed_value(delimiter)
 
-                # check for quotechar
-                # not clear in the doc, but as per cpython unittests, it can be None
-                if om_is(quotechar, om_None):
-                    quotechar_value = None
-                elif not om_isinstance(quotechar, class_str) or len(OM_get_boxed_value(quotechar)) != 1:
-                    return sem_raise_with_message(make_out_of_ast_context(dq_rte, None), class_TypeError, "quotechar must be a 1-character string")
-                else:
-                    quotechar_value = OM_get_boxed_value(quotechar)
+                def after_doublequote(dq_rte, doublequote_as_bool):
+                    # doublequote truthiness is tested
+                    doublequote_value = True if om_is(doublequote_as_bool, om_True) else False
 
-                # check for quoting
-                if not om_has_type(quoting, class_int):
-                    return sem_raise_with_message(make_out_of_ast_context(dq_rte, None), class_TypeError, "quoting must be an interger")
-                else:
-                    quoting_value = OM_get_boxed_value(quoting)
-                    if quoting_value < csv_param_quote_minimal or quoting_value > csv_param_quote_none:
-                        return sem_raise_with_message(make_out_of_ast_context(dq_rte, None), class_TypeError, "bad quoting value")
-                    if quoting_value == csv_param_quote_none:
+                    # check for escape char
+                    if om_is(escapechar, om_None):
+                        escapechar_value = None
+                    elif om_isinstance(escapechar, class_str) and len(OM_get_boxed_value(delimiter)) == 1:
+                        escapechar_value = OM_get_boxed_value(escapechar)
+                    else:
+                        return sem_raise_with_message(make_out_of_ast_context(dq_rte, None), class_TypeError, "escapechar must be a string or None")
+
+                    # check for lineterminator
+                    if not om_isinstance(lineterminator, class_str):
+                        return sem_raise_with_message(make_out_of_ast_context(dq_rte, None), class_TypeError, "lineterminator must be a string")
+                    else:
+                        lineterminator_value = OM_get_boxed_value(lineterminator)
+
+                    # check for quotechar
+                    # not clear in the doc, but as per cpython unittests, it can be None
+                    if om_is(quotechar, om_None):
                         quotechar_value = None
+                    elif not om_isinstance(quotechar, class_str) or len(OM_get_boxed_value(quotechar)) != 1:
+                        return sem_raise_with_message(make_out_of_ast_context(dq_rte, None), class_TypeError, "quotechar must be a 1-character string")
+                    else:
+                        quotechar_value = OM_get_boxed_value(quotechar)
 
-                def after_skipinitialspace(initialspace_rte, skipinitialspace_as_bool):
-                    # skipinitialspace truthiness is tested
-                    skipinitialspace_value = True if om_is(skipinitialspace_as_bool, om_True) else False
+                    # check for quoting
+                    if not om_has_type(quoting, class_int):
+                        return sem_raise_with_message(make_out_of_ast_context(dq_rte, None), class_TypeError, "quoting must be an interger")
+                    else:
+                        quoting_value = OM_get_boxed_value(quoting)
+                        if quoting_value < csv_param_quote_minimal or quoting_value > csv_param_quote_none:
+                            return sem_raise_with_message(make_out_of_ast_context(dq_rte, None), class_TypeError, "bad quoting value")
 
-                    def after_strict(initialspace_rte, strict_as_bool):
-                        # strict truthiness is tested
-                        strict_value = True if om_is(strict_as_bool, om_True) else False
+                    def after_skipinitialspace(initialspace_rte, skipinitialspace_as_bool):
+                        # skipinitialspace truthiness is tested
+                        skipinitialspace_value = True if om_is(skipinitialspace_as_bool, om_True) else False
 
-                        dialect_obj = om_csv_dialect(class_csv_dialect, delimiter_value, doublequote_value,
-                                                     escapechar_value, lineterminator_value, quotechar_value, quoting_value,
-                                                     skipinitialspace_value, strict_value)
+                        def after_strict(initialspace_rte, strict_as_bool):
+                            # strict truthiness is tested
+                            strict_value = True if om_is(strict_as_bool, om_True) else False
 
-                        reader = om_csv_reader(class_csv_reader, 0, it, dialect_obj)
-                        return unwind_return(initialspace_rte, reader)
+                            dialect_obj = om_csv_dialect(class_csv_dialect, delimiter_value, doublequote_value,
+                                                         escapechar_value, lineterminator_value, quotechar_value, quoting_value,
+                                                         skipinitialspace_value, strict_value)
 
-                    return sem_bool(make_out_of_ast_context(dq_rte, after_strict), strict)
+                            reader = create_csv_object(csvfile_transformation, dialect_obj)
+                            return unwind_return(initialspace_rte, reader)
+                        return sem_bool(make_out_of_ast_context(dq_rte, after_strict), strict)
+                    return sem_bool(make_out_of_ast_context(dq_rte, after_skipinitialspace), skipinitialspace)
+                return sem_bool(make_out_of_ast_context(reader_rte, after_doublequote), doublequote)
+            return check_csvfile(make_out_of_ast_context(rte, create_object), csvfile)
 
-                return sem_bool(make_out_of_ast_context(dq_rte, after_skipinitialspace), skipinitialspace)
+        return code
 
-            return sem_bool(make_out_of_ast_context(reader_rte, after_doublequote), doublequote)
 
-        return sem_iter(make_out_of_ast_context(rte, create_reader), csvfile)
+    reader_code = do_reader_writer_code(sem_iter, lambda it, dialect: om_csv_reader(class_csv_reader, 0, it, dialect))
+
+    def check_csvfile_writable(ctx, csvfile):
+        # NOTE: We do not check that the object is a writable file, we check that the object is writable (has callable write attribute)
+        no_write_method_msg = 'first argument must have a "write" method'
+
+        def return_write_method(rte, write_method):
+            if om_iscallable(write_method):
+                return cont_obj(ctx, write_method)
+            else:
+                return sem_raise_with_message(ctx, class_TypeError, no_write_method_msg)
+
+        def catch_AttributeError(exn):
+            if om_isinstance(exc, class_AttributeError):
+                return sem_raise_with_message(ctx, class_TypeError, no_write_method_msg)
+            else:
+                return sem_raise_unsafe(ctx.rte, exn)
+
+        return sem_getattribute(with_cont_and_catch(ctx, return_write_method, catch_AttributeError), csvfile, om_str("write"))
+
+    # As per cPython, the writer does not saves the file, but the write method instead
+    # Thus writing still happens even if the method is deleted or updated
+    writer_code = do_reader_writer_code(check_csvfile_writable,
+                                        lambda write_method, dialect: om_csv_writer(class_csv_writer, write_method, dialect))
 
     # See full details on formatting parameters here:
     # https://docs.python.org/3.8/library/csv.html#dialects-and-formatting-parameters
+
+    # NOTE: we can only share signature because it contains no mutable object
+    reader_writer_signature = make_signature(["dialect"], # args
+                                             ["csvfile"], # posonly
+                                             None, # *args
+                                             ["delimiter", "doublequote","escapechar", "lineterminator",
+                                              "quotechar", "quoting", "skipinitialspace", "strict"], # kwonly
+                                             [om_str(","), om_True, om_None, om_str("\n"),
+                                             om_str('"'), QUOTE_MINIMAL, om_False, om_False], # kw-defaults
+                                             None, # **kwargs
+                                            [om_str("excel")]) # dialect default
+
     dict_set(module_csv_env, 'reader',
-             om_make_builtin_function_with_signature(
-                'reader', reader_code,
-                make_signature(["dialect"], # args
-                               ["csvfile"], # posonly
-                               None, # *args
-                               ["delimiter", "doublequote","escapechar", "lineterminator",
-                                "quotechar", "quoting", "skipinitialspace", "strict"], # kwonly
-                               [om_str(","), om_True, om_None, om_str("\n"),
-                                om_str('"'), QUOTE_MINIMAL, om_False, om_False], # kw-defaults
-                                None, # **kwargs
-                                [om_str("excel")]))) # dialect default
+             om_make_builtin_function_with_signature('reader', reader_code, reader_writer_signature))
+
+    dict_set(module_csv_env, 'writer',
+             om_make_builtin_function_with_signature('writer', writer_code, reader_writer_signature))
 
     dict_set(module_csv_env, 'Error', class_csv_Error)
 
@@ -12186,6 +12443,9 @@ def sem_setattribute(ctx, obj, name, value):
 
     return sem_simple_call(with_cont(ctx, lambda rte, _: ctx.cont(rte)), obj_getattribute, [obj, name, value])
 
+def om_iscallable(obj):
+    return getattribute_from_obj_mro(obj, '__call__') is not absent
+
 def sem_simple_call(ctx, obj, args):
     obj_type = OM_get_object_class(obj)
 
@@ -12358,6 +12618,43 @@ def om_unpack_iterable(ctx, it):
         return sem_next_with_return_to_trampoline(Context(rte, accumulate, ctx.ast), iterator, for_loop_end_marker)
 
     return sem_iter(with_cont(ctx, get_next), it)
+
+# A version of unpack which applies a fn to each item before unpacking the next
+def om_unpack_map_iterable(ctx, fn, it):
+    def cont(rte, iterator):
+        return om_unpack_map_iterator(ctx, fn, iterator)
+    return sem_iter(with_cont(ctx, cont), it)
+
+def om_unpack_map_iterator(ctx, fn, iterator):
+    seq = []
+
+    def get_next(rte, iterator):
+        def apply(rte, val):
+            def accumulate(rte, res):
+                seq.append(res)
+                return get_next(rte, iterator)
+
+            if val is for_loop_end_marker:
+                return cont_obj(ctx, seq)
+            else:
+                return fn(with_cont(ctx, accumulate), val)
+        return sem_next_with_return_to_trampoline(with_cont(ctx, apply), iterator, for_loop_end_marker)
+    return get_next(ctx.rte, iterator)
+
+def om_foreach_iterator(ctx, fn, iterator):
+    def get_next(rte, iterator):
+        def apply(rte, val):
+            if val is for_loop_end_marker:
+                return cont_no_val(ctx)
+            else:
+                return fn(with_cont(ctx, lambda rte: get_next(rte, iterator)), val)
+        return sem_next_with_return_to_trampoline(with_cont(ctx, apply), iterator, for_loop_end_marker)
+    return get_next(ctx.rte, iterator)
+
+def om_foreach_iterable(ctx, fn, it):
+    def cont(rte, iterator):
+        return om_foreach_iterator(ctx, fn, iterator)
+    return sem_iter(with_cont(ctx, cont), it)
 
 def om_unpack_mapping(ctx, mapping):
     if om_isinstance(mapping, class_dict):
