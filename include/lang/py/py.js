@@ -877,7 +877,7 @@ function py2host(obj) {
         return obj.seq.map(py2host);
     }
     if (type(pyinterp.class_list)) {
-        return obj.seq.map(py2host);
+        return obj.seq.slice(0, obj.len).map(py2host);
     }
     // TODO: dicts
     if (type(pyinterp.class_bool)) {
@@ -922,7 +922,7 @@ function host_function2py(fn) {
     var signature = pyinterp.make_vararg_only_signature('args');
     function code(rte, cont) {
         var fn_args = py2host(pyinterp.rte_lookup_locals(rte, 'args'));
-        var result = host2py(fn.apply(null, fn_args));
+        var result = host2py(fn(...fn_args));
         if (result === pyinterp.absent) {
             return pyinterp.sem_raise_with_message(pyinterp.make_out_of_ast_context(rte, cont), pyinterp.class_ValueError, "Could not convert JavaScript type to Python")
         }
