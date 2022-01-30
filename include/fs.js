@@ -61,6 +61,7 @@ function CodeBootFile(fs, filename, content, opts) {
     file.content = (content !== undefined) ? content : NEW_FILE_DEFAULT_CONTENT;
     file.cursor = null;
     file.stamp = 0;
+    file.preferredEditorView = null;
 
     new CodeBootFileEditor(file); // initializes file.fe
 
@@ -70,6 +71,26 @@ function CodeBootFile(fs, filename, content, opts) {
         }
     }
 }
+
+CodeBootFile.prototype.extension = function (filename) {
+
+    var file = this;
+
+    var dot = filename.lastIndexOf('.');
+    var slash = filename.lastIndexOf('/');
+
+    if (dot > slash)
+        return filename.slice(dot);
+    else
+        return '';
+};
+
+CodeBootFile.prototype.getExtension = function () {
+
+    var file = this;
+
+    return file.extension(file.filename);
+};
 
 CodeBootFile.prototype.getContent = function () {
 
@@ -114,7 +135,8 @@ CodeBootFile.prototype.serialize = function () {
         cursor: file.cursor === null ?
                 {line: 0, ch: 0} :
                 {line: file.cursor.line, ch: file.cursor.ch},
-        stamp: file.stamp
+        stamp: file.stamp,
+        preferredEditorView: file.preferredEditorView
     };
 
     return json;
@@ -134,18 +156,11 @@ CodeBootFile.prototype.clone = function () {
     return other;
 };
 
-CodeBootFile.prototype.setReadOnly = function (enableReadOnly) {
+CodeBootFile.prototype.setReadOnly = function (readOnly) {
 
     var file = this;
-    var vm = file.fs.vm;
 
-    file.fe.editor.markText(vm.beginningOfEditor(),
-                            vm.endOfEditor(),
-                            {
-                                readOnly: enableReadOnly,
-                                inclusiveLeft: true,
-                                inclusiveRight: true
-                            });
+    file.fe.setReadOnly(readOnly);
 };
 
 function CodeBootFileSystem(vm) {
@@ -163,7 +178,7 @@ CodeBootFileSystem.prototype.init = function () {
 
     var fs = this;
 
-    fs.removeAllEditors();
+    fs.removeAllFileEditors();
     fs.clear();
     fs.rebuildFileMenu();
 };
@@ -296,11 +311,11 @@ CodeBootFileSystem.prototype.getContent = function (fileOrFilename) {
     return file.getContent();
 };
 
-CodeBootFileSystem.prototype.getEditor = function (fileOrFilename) {
+CodeBootFileSystem.prototype.getTextEditor = function (fileOrFilename) {
 
     var fs = this;
 
-    return fs._asFile(fileOrFilename).fe.editor;
+    return fs._asFile(fileOrFilename).fe.textEditor;
 };
 
 CodeBootFileSystem.prototype.setContent = function (fileOrFilename, content) {
@@ -328,11 +343,11 @@ CodeBootFileSystem.prototype.each = function (callback, selector) {
     }
 };
 
-CodeBootFileSystem.prototype.forEachEditor = function (callback) {
+CodeBootFileSystem.prototype.forEachFileEditor = function (callback) {
 
     var fs = this;
 
-    fs.fem.editors.forEach(callback);
+    fs.fem.fileEditors.forEach(callback);
 };
 
 CodeBootFileSystem.prototype.serialize = function () {
@@ -373,15 +388,32 @@ CodeBootFileSystem.prototype.rebuildFileMenu = function () {
 
         elem.innerHTML = ''; // remove children
 
-        var item = fs.newMenuItem(elem,
-                                  'cb-file-new dropdown-item',
-                                  vm.polyglotHTML('New file'));
+        var newFile = fs.newMenuItem(elem,
+                                     'cb-file-new dropdown-item',
+                                     vm.polyglotHTML('New file'));
 
-        elem.appendChild(item);
+        elem.appendChild(newFile);
 
-        item.addEventListener('click', function (event) {
+        newFile.addEventListener('click', function (event) {
             fs.newFile();
         });
+
+        var resetFS = fs.newMenuItem(elem,
+                                     'cb-reset-filesystem dropdown-item',
+                                     vm.polyglotHTML('Reset filesystem'));
+
+        elem.appendChild(resetFS);
+
+        resetFS.addEventListener('click', function (event) {
+            vm.confirmHTML(vm.polyglotHTML('Reset filesystem? This cannot be undone.'),
+                           function (yes) {
+                               if (yes) {
+                                   fs.init();
+                               }
+                           });
+        });
+
+        fs.addDividerToMenu(elem);
 
         fs.each(function (file) {
             fs.addFileToMenu(elem, file);
@@ -445,10 +477,6 @@ CodeBootFileSystem.prototype.addFileToMenu = function (elem, file) {
     function dismissMenu() {
         $(elem).find($('[data-toggle="tooltip"]')).tooltip('hide');
         elem.classList.remove('show');
-    }
-
-    if (elem.childNodes && elem.childNodes.length == 1) {
-        fs.addDividerToMenu(elem);
     }
 
     var item = fs.newMenuItem(elem,
@@ -563,9 +591,9 @@ CodeBootFile.prototype.toRichText = function () {
 
     var file = this;
     var fe = file.fe;
-    var editor = fe.editor;
+    var textEditor = fe.textEditor;
 
-    if (fe.editor === null) {
+    if (textEditor === null) {
         return null;
 /*
         var content = file.getContent();
@@ -576,8 +604,8 @@ CodeBootFile.prototype.toRichText = function () {
         var styles = ['text-transform', 'color', 'font-weight'];
         var richText = '<pre style="font-family: \'Lucida Console\', \'Hack\', Monaco, monospace; font-size: 18px;">';
 
-        for (var i=0; i<editor.lineCount(); i++) {
-            var lineTokens = editor.getLineTokens(i, true);
+        for (var i=0; i<textEditor.lineCount(); i++) {
+            var lineTokens = textEditor.getLineTokens(i, true);
             for (var j=0; j<lineTokens.length; j++) {
                 var t = lineTokens[j];
                 var token = escape_HTML(t.string);
@@ -654,9 +682,9 @@ CodeBootFileSystem.prototype.openFileExistingOrNew = function (filename) {
     }
 };
 
-CodeBootFileSystem.prototype.removeAllEditors = function () {
+CodeBootFileSystem.prototype.removeAllFileEditors = function () {
     var fs = this;
-    fs.fem.removeAllEditors();
+    fs.fem.removeAllFileEditors();
 };
 
 //-----------------------------------------------------------------------------
@@ -667,7 +695,7 @@ function CodeBootFileEditorManager(fs) {
 
     fs.fem = fem;
     fem.fs = fs;
-    fem.editors = [];
+    fem.fileEditors = [];
     fem.activated = -1;
 }
 
@@ -675,7 +703,7 @@ CodeBootFileEditorManager.prototype.currentlyActivated = function () {
 
     var fem = this;
 
-    return fem.activated >= 0 ? fem.editors[fem.activated] : null;
+    return fem.activated >= 0 ? fem.fileEditors[fem.activated] : null;
 
 };
 
@@ -691,8 +719,8 @@ CodeBootFileEditorManager.prototype.indexOf = function (fe) {
 
     var fem = this;
 
-    for (var i=fem.editors.length-1; i>=0; i--) {
-        if (fem.editors[i] === fe) {
+    for (var i=fem.fileEditors.length-1; i>=0; i--) {
+        if (fem.fileEditors[i] === fe) {
             return i;
         }
     }
@@ -709,14 +737,14 @@ CodeBootFileEditorManager.prototype.activate = function (fe) {
 
     var i = fem.indexOf(fe);
 
-    if (i < 0) return; // not a valid editor
+    if (i < 0) return; // not a valid file editor
 
     if (fem.activated >= 0) {
         // deactivate currently activated editor
-        fem.editors[fem.activated].deactivatePresentation();
+        fem.fileEditors[fem.activated].deactivatePresentation();
     }
 
-    fe.activatePresentation(); // activate editor
+    fe.activatePresentation(); // activate file editor
 
     fem.activated = i; // remember it is activated
 
@@ -727,29 +755,29 @@ CodeBootFileEditorManager.prototype.add = function (fe) {
 
     var fem = this;
 
-    fem.editors.push(fe);
+    fem.fileEditors.push(fe);
 
     if (fem.activated < 0) {
-        fem.show(); // show editors
+        fem.show(); // show file editors
         fe.activate(); // activate editor
     }
 };
 
-CodeBootFileEditorManager.prototype.setReadOnlyAllEditors = function (readOnly) {
+CodeBootFileEditorManager.prototype.setReadOnlyAllFileEditors = function (readOnly) {
 
     var fem = this;
 
-    for (var i=0; i<fem.editors.length; i++) {
-        fem.editors[i].setReadOnly(readOnly);
+    for (var i=0; i<fem.fileEditors.length; i++) {
+        fem.fileEditors[i].setReadOnly(readOnly);
     }
 };
 
-CodeBootFileEditorManager.prototype.removeAllEditors = function () {
+CodeBootFileEditorManager.prototype.removeAllFileEditors = function () {
 
     var fem = this;
 
-    while (fem.editors.length > 0) {
-        fem.remove(fem.editors[fem.editors.length-1]);
+    while (fem.fileEditors.length > 0) {
+        fem.remove(fem.fileEditors[fem.fileEditors.length-1]);
     }
 };
 
@@ -758,7 +786,7 @@ CodeBootFileEditorManager.prototype.remove = function (fe) {
     var fem = this;
     var i = fem.indexOf(fe);
 
-    if (i < 0) return; // not a valid editor
+    if (i < 0) return; // not a valid file editor
 
     fe.file.save();
 
@@ -769,19 +797,21 @@ CodeBootFileEditorManager.prototype.remove = function (fe) {
     fe.fileTabInput = null;
     fe.fileTabSpan = null;
     fe.fileContainer = null;
-    fe.editor = null;
+    fe.textEditor = null;
+    fe.spreadsheetEditor = null;
+    fe.currentEditorView = null;
 
-    fem.editors.splice(i, 1); // remove from editors
+    fem.fileEditors.splice(i, 1); // remove from file editors
 
     if (i === fem.activated) {
         fem.activated = -1;
-        // need to activate some other editor
-        if (i < fem.editors.length) {
-            fem.editors[i].activate();
+        // need to activate some other file editor
+        if (i < fem.fileEditors.length) {
+            fem.fileEditors[i].activate();
         } else if (i > 0) {
-            fem.editors[i-1].activate();
+            fem.fileEditors[i-1].activate();
         } else {
-            // no other editor to activate
+            // no other file editor to activate
             fem.hide();
             fem.fs.vm.replFocus();
         }
@@ -820,7 +850,9 @@ function CodeBootFileEditor(file) {
     fe.fileTabInput = null;
     fe.fileTabSpan = null;
     fe.fileContainer = null;
-    fe.editor = null;
+    fe.textEditor = null;
+    fe.spreadsheetEditor = null;
+    fe.currentEditorView = null;
 
     file.fe = fe;
 }
@@ -846,8 +878,9 @@ CodeBootFileEditor.prototype.activatePresentation = function () {
     var fe = this;
 
     fe.fileTab.classList.add('active');
-    fe.fileContainer.style.display = 'inline';
-    fe.editor.refresh();
+    fe.fileContainer.classList.add('active');
+//    fe.fileContainer.style.display = 'inline';
+    fe.refresh();
 };
 
 CodeBootFileEditor.prototype.deactivatePresentation = function () {
@@ -855,7 +888,8 @@ CodeBootFileEditor.prototype.deactivatePresentation = function () {
     var fe = this;
 
     fe.fileTab.classList.remove('active');
-    fe.fileContainer.style.display = 'none';
+    fe.fileContainer.classList.remove('active');
+//    fe.fileContainer.style.display = 'none';
 };
 
 CodeBootFileEditor.prototype.removePresentation = function () {
@@ -878,7 +912,7 @@ CodeBootFileEditor.prototype.isEnabled = function () {
 
     var fe = this;
 
-    return fe.editor !== null;
+    return fe.textEditor !== null;
 };
 
 CodeBootFileEditor.prototype.getValue = function () {
@@ -886,10 +920,14 @@ CodeBootFileEditor.prototype.getValue = function () {
     var fe = this;
 
     if (fe.isEnabled()) {
-        return fe.editor.getValue();
-    } else {
-        return '';
+        if (fe.currentEditorView === 'text') {
+            return fe.textEditor.getValue();
+        } else if (fe.currentEditorView === 'spreadsheet') {
+            return fe.spreadsheetEditor.getValue();
+        }
     }
+
+    return '';
 };
 
 CodeBootFileEditor.prototype.setValue = function (val) {
@@ -897,7 +935,11 @@ CodeBootFileEditor.prototype.setValue = function (val) {
     var fe = this;
 
     if (fe.isEnabled()) {
-        fe.editor.setValue(val);
+        if (fe.currentEditorView === 'text') {
+            fe.textEditor.setValue(val);
+        } else if (fe.currentEditorView === 'spreadsheet') {
+            fe.spreadsheetEditor.setValue(val);
+        }
     }
 };
 
@@ -913,8 +955,8 @@ CodeBootFileEditor.prototype.focus = function () {
 
     var fe = this;
 
-    fe.editor.focus();
-    fe.file.fs.vm.trackEditorFocus(fe.editor, true);
+    fe.textEditor.focus();
+    fe.file.fs.vm.trackTextEditorFocus(fe.textEditor, true);
 };
 
 CodeBootFileEditor.prototype.menuHTML = function () {
@@ -936,13 +978,13 @@ CodeBootFileEditor.prototype.menuHTML = function () {
 \
       <a href="#" class="dropdown-item" data-cb-file-tab-delete>' + vm.SVG['trash'] + '&nbsp;&nbsp;' + vm.polyglotHTML('Delete file') + '</a>\
 \
-    <div class="cb-file-tab-editor-type">\
+    <div class="cb-file-tab-editor-view">\
 \
       <div class="dropdown-divider"></div>\
 \
       <h5 class="dropdown-header">' + vm.polyglotHTML('Editor') + '</h5>\
-      <a href="#" class="dropdown-item" data-cb-file-tab-editor="text">' + vm.SVG['checkmark'] + '&nbsp;&nbsp;' + vm.polyglotHTML('Text') + '</a>\
-      <a href="#" class="dropdown-item" data-cb-file-tab-editor="spreadsheet"><span style="visibility:hidden">' + vm.SVG['checkmark'] + '</span>&nbsp;&nbsp;' + vm.polyglotHTML('Spreadsheet') + '</a>\
+      <a href="#" class="dropdown-item" data-cb-file-tab-editor-view="text">' + vm.SVG['checkmark'] + '&nbsp;&nbsp;' + vm.polyglotHTML('Text') + '</a>\
+      <a href="#" class="dropdown-item" data-cb-file-tab-editor-view="spreadsheet">' + vm.SVG['checkmark'] + '&nbsp;&nbsp;' + vm.polyglotHTML('Spreadsheet') + '</a>\
 \
     </div>\
   </div>\
@@ -955,14 +997,16 @@ CodeBootFileEditor.prototype.setFilename = function (filename) {
 
     fe.fileTabSpan.innerText = filename;
 
-    var dot = filename.lastIndexOf('.');
-    var slash = filename.lastIndexOf('/');
-    var ext = '';
-
-    if (dot > slash) ext = filename.slice(dot);
+    var ext = fe.file.extension(filename);
 
     fe.fileTab.setAttribute('data-cb-file-tab-filename', filename);
     fe.fileTab.setAttribute('data-cb-file-tab-extension', ext);
+
+    var view = (ext === '.csv' || ext === '.tsv') ? 'spreadsheet' : 'text';
+
+    if (fe.file.preferredEditorView === null || view === 'text') {
+        fe.setEditorView(view);
+    }
 };
 
 CodeBootFileEditor.prototype.enable = function () {
@@ -1005,12 +1049,8 @@ CodeBootFileEditor.prototype.enable = function () {
                 fe.file.copyToClipboard();
             } else if (elem.hasAttribute('data-cb-file-tab-delete')) {
                 fe.file.delete();
-            } else if (val = elem.getAttribute('data-cb-file-tab-editor')) {
-                if (val === 'text') {
-                    console.log('text');
-                } else if (val === 'spreadsheet') {
-                    console.log('spreadsheet');
-                }
+            } else if (val = elem.getAttribute('data-cb-file-tab-editor-view')) {
+                fe.setEditorView(val);
             }
 
             return true;
@@ -1023,9 +1063,14 @@ CodeBootFileEditor.prototype.enable = function () {
     fileContainer.className = 'cb-file-container';
 
     var textarea = document.createElement('textarea');
-    textarea.className = 'cb-file-editor';
+    textarea.className = 'cb-file-text-editor';
 
     fileContainer.appendChild(textarea);
+
+    var spreadsheet = document.createElement('div');
+    spreadsheet.className = 'cb-file-spreadsheet-editor';
+
+    fileContainer.appendChild(spreadsheet);
 
     // add file tab and file container
 
@@ -1037,14 +1082,14 @@ CodeBootFileEditor.prototype.enable = function () {
         elem.appendChild(fileContainer);
     });
 
-    // create code editor
+    // create text editor
 
-    var editor = fe.file.fs.vm.createCodeEditor(textarea, file);
+    var textEditor = fe.file.fs.vm.createCodeEditor(textarea, file);
 
-    editor.setValue(file.content);
+    textEditor.setValue(file.content);
 
     if (file.cursor) {
-        editor.setCursor(file.cursor);
+        textEditor.setCursor(file.cursor);
     }
 
     fileTabButton.addEventListener('click', function (event) {
@@ -1059,8 +1104,12 @@ CodeBootFileEditor.prototype.enable = function () {
     });
 
     fileContainer.addEventListener('click', function (event) {
-        editor.focus();
+        textEditor.focus();
     });
+
+    // create spreadsheet editor
+
+    var spreadsheetEditor = fe.file.fs.vm.createSpreadsheetEditor(spreadsheet, fe);
 
     // remember each element for quick access
 
@@ -1069,11 +1118,166 @@ CodeBootFileEditor.prototype.enable = function () {
     fe.fileTabInput = fileTabInput;
     fe.fileTabSpan = fileTabSpan;
     fe.fileContainer = fileContainer;
-    fe.editor = editor;
-
-    fe.setFilename(filename);
+    fe.textEditor = textEditor;
+    fe.spreadsheetEditor = spreadsheetEditor;
+    fe.currentEditorView = null;
 
     file.fs.fem.add(fe);
+
+    fe.setEditorView(file.preferredEditorView);
+    fe.setFilename(filename);
+};
+
+CodeBootVM.prototype.createSpreadsheetEditor = function (elem, fe) {
+
+    var vm = this;
+
+    return new CodeBootSpreadsheetEditor(elem, fe);
+};
+
+function CodeBootSpreadsheetEditor(elem, fe) {
+
+    var se = this;
+
+    se.elem = elem;
+    se.fe = fe;
+
+    var data = se.extractData(fe.file.content);
+
+    se.firstLineIsHeaders = data.firstLineIsHeaders;
+
+    var jsoptions = {
+        data: data.rows,
+        colHeaders: data.headers,
+        colWidths: data.widths
+    };
+
+    se.jspreadsheet = jspreadsheet(elem, jsoptions);
+}
+
+CodeBootSpreadsheetEditor.prototype.getDelimiter = function () {
+
+    var se = this;
+
+    return (se.fe.file.getExtension() === '.tsv') ? '\t' : ',';
+};
+
+CodeBootSpreadsheetEditor.prototype.getValue = function () {
+
+    var se = this;
+
+    var delimiter = se.getDelimiter();
+
+    var text = se.jspreadsheet.copy(false, delimiter, true, se.firstLineIsHeaders);
+
+    return text.replace(/\r\n/g, '\n');
+};
+
+CodeBootSpreadsheetEditor.prototype.setValue = function (value) {
+
+    var se = this;
+
+    var data = se.extractData(value);
+
+    se.firstLineIsHeaders = data.firstLineIsHeaders;
+
+    var jsoptions = {
+        data: data.rows,
+        colHeaders: data.headers,
+        colWidths: data.widths
+    };
+
+    se.elem.innerHTML = ''; // remove current spreadsheet element
+    se.jspreadsheet = jspreadsheet(se.elem, jsoptions);
+    se.fe.fileContainer.appendChild(se.elem);
+};
+
+CodeBootSpreadsheetEditor.prototype.extractData = function (value) {
+
+    var se = this;
+
+    var delimiter = se.getDelimiter();
+
+    var table = jexcel.helpers.parseCSV(value, delimiter)
+
+    function isNumber(x) {
+        return x !== '' && !isNaN(+x);
+    }
+
+    function noNumbers(arr) {
+        return !arr.some(isNumber);
+    }
+
+    var headers = null;
+    var rows;
+
+    if (table.length === 0) {
+        rows = [['']];
+    } else if (table.length === 1) {
+        rows = table.slice();
+    } else {
+        if (noNumbers(table[0]) && !noNumbers(table[1])) {
+            headers = table[0];
+            rows = table.slice(1);
+        } else {
+            rows = table.slice();
+        }
+    }
+
+    var firstLineIsHeaders = headers !== null;
+
+    if (!firstLineIsHeaders) {
+        headers = rows[0].map(function (x, i) {
+            return se.defaultColumnName(i);
+        });
+    }
+
+    var widths = rows[0].map(function (x, i) {
+        var maxWidth = 0;
+        rows.forEach(function (row) {
+            var cell = (i<row.length) ? row[i] : '';
+            var w = (cell.length + 1) * 12 + 10;
+            if (w > maxWidth) maxWidth = w;
+        });
+        return maxWidth;
+    });
+
+    return { rows: rows,
+             headers: headers,
+             firstLineIsHeaders: firstLineIsHeaders,
+             widths: widths
+           };
+};
+
+CodeBootSpreadsheetEditor.prototype.defaultColumnName = function (index) {
+
+    var se = this;
+
+    var name = '';
+
+    index++;
+
+    do {
+        index--;
+        name = String.fromCharCode(65+(index % 26)) + name;
+        index = Math.floor(index/26);
+    } while (index > 0);
+
+    return name;
+}
+
+CodeBootFileEditor.prototype.setShowLineNumbers = function (show) {
+
+    var fe = this;
+
+    fe.textEditor.setOption('lineNumbers', show);
+};
+
+CodeBootFileEditor.prototype.refresh = function () {
+
+    var fe = this;
+
+    fe.textEditor.refresh();
 };
 
 // length of window (in ms) during which changes will be buffered
@@ -1189,9 +1393,42 @@ CodeBootFileEditor.prototype.rename = function () {
 };
 
 CodeBootFileEditor.prototype.setReadOnly = function (readOnly) {
+
     var fe = this;
-    fe.editor.setOption('readOnly', readOnly);
-    fe.editor.setOption('matchBrackets', !readOnly);
+    var file = fe.file;
+    var fs = file.fs;
+    var vm = fs.vm;
+    var textEditor = fe.textEditor;
+
+    textEditor.markText(vm.beginningOfEditor(),
+                        vm.endOfEditor(),
+                        {
+                            readOnly: readOnly,
+                            inclusiveLeft: true,
+                            inclusiveRight: true
+                        });
+
+    textEditor.setOption('matchBrackets', !readOnly);
+};
+
+CodeBootFileEditor.prototype.setEditorView = function (view) {
+
+    var fe = this;
+
+    fe.file.save(); // save in fe.file.content
+
+    fe.fileTab.setAttribute('data-cb-editor-view', view);
+    fe.fileContainer.setAttribute('data-cb-editor-view', view);
+    fe.currentEditorView = view;
+    fe.file.preferredEditorView = view;
+
+    if (fe.getValue !== fe.file.content) {
+        fe.setValue(fe.file.content); // restore from fe.file.content
+    }
+
+    fe.refresh();
+
+    fe.file.fs.vm.focusLastFocusedEditor();
 };
 
 //-----------------------------------------------------------------------------

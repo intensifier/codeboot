@@ -989,7 +989,7 @@ CodeBootVM.prototype.remove = function () {
 
     var vm = this;
 
-    vm.fs.removeAllEditors();
+    vm.fs.removeAllFileEditors();
 
     if (vm.root.parentNode) {
         vm.root.parentNode.removeChild(vm.root);
@@ -1550,9 +1550,8 @@ CodeBootVM.prototype.helpHTML = function () {
 \
           <div class="tab-pane fade" id="files" role="tabpanel" aria-labelledby="grammar-tab">\
             <p>Importing a file from the desktop is done using drag-and-drop.</p>\
-            <p>Saving a file to the desktop is done using the download icon next\
-              to its name in the Files menu.</p>\
-            <p>Renaming a file is done by double clicking its editor tab.<p>\
+            <p>Renaming a file and saving a file to the desktop is done by\
+               clicking the editor tab and selecting the operation from the menu.</p>\
           </div>\
 \
           <div class="tab-pane fade" id="grammar" role="tabpanel" aria-labelledby="grammar-tab">\
@@ -2952,8 +2951,8 @@ CodeBootVM.prototype.consoleHTML = function () {
   </div>\
   <div class="cb-pane-splitter"></div>\
   <div class="cb-playground cb-pane-rigid">\
-    <div class="cb-drawing-window"></div>\
-    <div class="cb-pixels-window"></div>\
+    <div class="cb-drawing-window" draggablezz="true"></div>\
+    <div class="cb-pixels-window" draggablezz="true"></div>\
     <div class="cb-chart-window"></div>\
     <div class="cb-html-window"></div>\
   </div>\
@@ -3231,6 +3230,9 @@ CodeBootVM.prototype.initCommon = function (opts) {
                 ctxmenu.style.top = (event.pageY - 15) + 'px';
                 ctxmenu.style.display = 'block';
             }
+
+            if (!(event.shiftKey && event.ctrlKey))
+                return; // ignore if shift and ctrl key not pressed
 
             if (vm &&
                 !(event.target.closest('.cb-drawing-window') ||
@@ -3609,7 +3611,7 @@ CodeBootVM.prototype.setupEventHandlers = function () {
         var file = files[0];
 
         var filename = $('#openFileModal').attr('data-cb-filename');
-        vm.loadFile(vm.fs.getEditor(filename), file);
+        vm.loadFile(vm.fs.getTextEditor(filename), file);
     });
 /*
     vm.root.addEventListener('mousedown', function (event) {
@@ -3946,8 +3948,8 @@ CodeBootVM.prototype.setShowLineNumbers = function (show) {
 
         vm.setAttribute('data-cb-show-line-numbers', show);
 
-        vm.fs.forEachEditor(function (editor) {
-            editor.editor.setOption('lineNumbers', vm.showLineNumbers);
+        vm.fs.forEachFileEditor(function (fe) {
+            fe.setShowLineNumbers(vm.showLineNumbers);
         });
 
         vm.stateChanged();
@@ -3980,8 +3982,8 @@ CodeBootVM.prototype.refresh = function () {
     vm.repl.refresh();
     vm.replScrollToEnd();
 
-    vm.fs.forEachEditor(function (editor) {
-        editor.editor.refresh();
+    vm.fs.forEachFileEditor(function (fe) {
+        fe.refresh();
     });
 };
 

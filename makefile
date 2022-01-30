@@ -32,7 +32,7 @@ bundle: codeboot.bundle.css codeboot.bundle.js
 	# We probably should move away from inliner eventually...
 	inliner index.html | awk -v RS="\0" -v ORS="" '{gsub(/~~s\ns~~/," nl ")}7' > codeboot_bundle.html
 
-codeboot.bundle.css: include/bootstrap-4.5.0-dist/css/bootstrap.min.css include/codemirror-5.56.0/lib/codemirror.css include/codemirror-5.56.0/addon/dialog/dialog.css include/codeboot.css
+codeboot.bundle.css: include/bootstrap-4.5.0-dist/css/bootstrap.min.css include/codemirror-5.56.0/lib/codemirror.css include/codemirror-5.56.0/addon/dialog/dialog.css jspreadsheet-4.9.11/dist/jspreadsheet.css jsuites-4.9.34/dist/jsuites.css include/codeboot.css
 	@echo "*** Building codeboot.bundle.css"
 	@rm -f $@
 	@touch $@
@@ -41,7 +41,7 @@ codeboot.bundle.css: include/bootstrap-4.5.0-dist/css/bootstrap.min.css include/
 	  echo >> $@; \
 	done
 
-codeboot.bundle.js: include/jquery-3.2.1.min.js include/jquery.clippy.min.js include/bootstrap-4.5.0-dist/js/bootstrap.bundle.min.js include/popper.min.js include/tippy-bundle.umd.min.js include/codemirror-5.56.0/lib/codemirror.js include/codemirror-5.56.0/addon/edit/matchbrackets.js include/codemirror-5.56.0/addon/display/rulers.js include/codemirror-5.56.0/addon/search/searchcursor.js include/codemirror-5.56.0/addon/search/search.js include/codemirror-5.56.0/addon/comment/comment.js include/codemirror-5.56.0/addon/dialog/dialog.js include/codemirror-5.56.0/keymap/emacs.js include/codemirror-5.56.0/mode/javascript/javascript.js include/codemirror-5.56.0/mode/python/python.js include/download.js include/lang.js include/lang/js/num.js include/int.js include/float.js include/lang/js/js.js include/lang/js/system.js include/lang/js/scanner.js include/lang/js/parser.js include/lang/js/pp.js include/lang/js/ast-passes.js include/lang/js/eval.js include/lang/js/builtins.js include/lang/py/py.js include/lang/py/pyinterp.js include/lang/py/style.js include/codeboot.js include/i18n.js include/drawing.js include/actions.js include/editors.js include/fs.js include/storage.js include/tutorial.js include/jquery.visibility.js
+codeboot.bundle.js: include/jquery-3.2.1.min.js include/jquery.clippy.min.js include/bootstrap-4.5.0-dist/js/bootstrap.bundle.min.js include/popper.min.js include/tippy-bundle.umd.min.js include/codemirror-5.56.0/lib/codemirror.js include/codemirror-5.56.0/addon/edit/matchbrackets.js include/codemirror-5.56.0/addon/display/rulers.js include/codemirror-5.56.0/addon/search/searchcursor.js include/codemirror-5.56.0/addon/search/search.js include/codemirror-5.56.0/addon/comment/comment.js include/codemirror-5.56.0/addon/dialog/dialog.js include/codemirror-5.56.0/keymap/emacs.js include/codemirror-5.56.0/mode/javascript/javascript.js include/codemirror-5.56.0/mode/python/python.js jspreadsheet-4.9.11/dist/jspreadsheet.js jsuites-4.9.34/dist/jsuites.js include/download.js include/lang.js include/lang/js/num.js include/int.js include/float.js include/lang/js/js.js include/lang/js/system.js include/lang/js/scanner.js include/lang/js/parser.js include/lang/js/pp.js include/lang/js/ast-passes.js include/lang/js/eval.js include/lang/js/builtins.js include/lang/py/py.js include/lang/py/pyinterp.js include/lang/py/style.js include/codeboot.js include/i18n.js include/drawing.js include/actions.js include/editors.js include/fs.js include/storage.js include/tutorial.js include/jquery.visibility.js
 	@echo "*** Building codeboot.bundle.js"
 	@rm -f $@
 	@touch $@

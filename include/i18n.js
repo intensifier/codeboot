@@ -133,6 +133,14 @@ CodeBootVM.prototype.translateDict = {
         'fr': 'Nouveau fichier',
     },
 
+    'Reset filesystem': {
+        'fr': 'Initialiser système de fichier',
+    },
+
+    'Reset filesystem? This cannot be undone.': {
+        'fr': 'Initialiser le système de fichier? Ceci ne peut être défait.',
+    },
+
     'Animation speed': {
         'fr': 'Vitesse d\'animation',
     },
