@@ -9473,6 +9473,11 @@ def om_host_eval_code(rte, cont):
         return sem_raise_with_message(make_out_of_ast_context(rte, cont), class_ValueError, "Could not convert JavaScript type to Python")
     return unwind_return(rte, result)
 
+def om_runtime_chart_code(rte, cont):
+    args = rte_lookup_locals(rte, 'args')
+    runtime_chart(args)
+    return unwind_return(rte, om_None)
+
 def fresh_rte(options):
     locals_env = absent
     globals_env = make_dict()
@@ -9508,6 +9513,9 @@ def fresh_rte(options):
 
     # FFI
     om_host_eval = om_make_builtin_function_with_signature('host_eval', om_host_eval_code, make_posonly_only_signature(('expr',)))
+
+    # Charts
+    om_runtime_chart = om_make_builtin_function_with_signature('chart', om_runtime_chart_code, make_vararg_only_signature('args'))
 
     dict_set(builtins_env, 'type', class_type)
     dict_set(builtins_env, 'object', class_object)
@@ -9545,6 +9553,9 @@ def fresh_rte(options):
 
     # FFI
     dict_set(builtins_env, 'host_eval', om_host_eval)
+
+    # Charts
+    dict_set(builtins_env, 'chart', om_runtime_chart)
 
     dict_set(builtins_env, 'BaseException', class_BaseException)
     dict_set(builtins_env, 'Exception', class_Exception)

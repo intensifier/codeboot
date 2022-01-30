@@ -912,3 +912,7 @@ def is_host_list(obj):
 
 def is_host_dict(obj):
     raise NotImplementedError("not running in a browser")
+
+# Charts
+def runtime_chart(args):
+    raise NotImplementedError("not running in a browser")
