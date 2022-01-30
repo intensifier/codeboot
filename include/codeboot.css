@@ -1,8 +1,47 @@
+/* Useful for debugging
+
+.CodeMirror {
+    outline: 1px solid #888;
+}
+
+.CodeMirror-scroll {
+    outline: 1px solid #fcc;
+}
+
+.CodeMirror-gutter {
+    outline: 1px solid #1a1;
+}
+
+.CodeMirror-gutters {
+    outline: 1px solid #cfc;
+}
+
+.CodeMirror-scrollbar-filler {
+    outline: 1px solid #f00;
+}
+
+.CodeMirror-vscrollbar {
+    outline: 1px solid #922;
+}
+
+.CodeMirror-gutter-filler {
+    outline: 1px solid #0f0;
+}
+
+.CodeMirror-sizer {
+    outline: 1px solid yellow;
+    max-height: 200px ! important;
+}
+
+/* General settings of the codeBoot UI */
+
 body {
     --cb-navbar-color: #90c0ff;
     --cb-focus-repl-navbar-controls-color: #7db6d5;
     --cb-focus-repl-navbar-controls-hover-color: #afd3e6;
     --cb-repl-container-color: #e0f0f6;
+    --cb-file-container-color: #f6f6f6;
+    --cb-file-tab-inactive-color: #fdfdfd;
     --cb-exec-point-color: yellow;
     --cb-exec-point-bubble-color: var(--cb-exec-point-color);
     --cb-console-height: 260px;    /* initial console height */
@@ -17,20 +56,66 @@ body {
     --cb-file-tab-border-radius: 10px;
 }
 
-.cb-vm {
-    all:initial;
-    font-family: Helvetica;
-    overflow: hidden;
-    display: flex;
-    flex-direction: column;
-    /*height: 100vh;*/
-    border-radius: var(--cb-main-border-radius); /****************/
-    text-align: left;
-    z-index: 10;
-    width: 100%;
+/* Internationalization support */
+
+.cb-en:lang(de),
+.cb-en:lang(es),
+.cb-en:lang(fr),
+.cb-en:lang(hi),
+.cb-en:lang(ja),
+.cb-en:lang(pt),
+.cb-en:lang(zh),
+.cb-de,
+.cb-es,
+.cb-fr,
+.cb-hi,
+.cb-ja,
+.cb-pt,
+.cb-zh {
+    display: none;
 }
 
-pre.cb-vm{
+.cb-en:not(:lang(de)):not(:lang(es)):not(:lang(fr)):not(:lang(hi)):not(:lang(ja)):not(:lang(pt)):not(:lang(zh)),
+.cb-de:lang(de),
+.cb-es:lang(es),
+.cb-fr:lang(fr),
+.cb-hi:lang(hi),
+.cb-ja:lang(ja),
+.cb-pt:lang(pt),
+.cb-zh:lang(zh) {
+    display: inline;
+}
+
+[data-cb-setting-ui-lang] > svg {
+    visibility: hidden;
+}
+
+[data-cb-setting-ui-lang="en"]:not(:lang(de)):not(:lang(es)):not(:lang(fr)):not(:lang(hi)):not(:lang(ja)):not(:lang(pt)):not(:lang(zh)) > svg,
+[data-cb-setting-ui-lang="de"]:lang(de) > svg,
+[data-cb-setting-ui-lang="es"]:lang(es) > svg,
+[data-cb-setting-ui-lang="fr"]:lang(fr) > svg,
+[data-cb-setting-ui-lang="hi"]:lang(hi) > svg,
+[data-cb-setting-ui-lang="ja"]:lang(ja) > svg,
+[data-cb-setting-ui-lang="pt"]:lang(pt) > svg,
+[data-cb-setting-ui-lang="zh"]:lang(zh) > svg {
+    visibility: visible;
+}
+
+/* codeBoot VM */
+
+.cb-vm {
+//    all: initial;
+//    font-family: Helvetica;
+//    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    border-radius: var(--cb-main-border-radius);
+//    text-align: left;
+//    z-index: 10;
+//    width: 100%;
+}
+
+pre.cb-vm {
     white-space: pre-wrap;
 }
 
@@ -54,18 +139,11 @@ pre.cb-vm{
     display: none;
 }
 
-.cb-vm:not([data-cb-show-console]) > div.cb-v-panes > div.cb-pane-splitter,
-.cb-vm:not([data-cb-show-playground]) > div.cb-h-panes > div.cb-pane-splitter {
-    display: none;
-}
+/* Hide splitters when nothing to split */
 
-.cb-vm:[data-cb-show-header] > div.cb-header,
-.cb-vm:[data-cb-show-footer] > div.cb-footer,
-.cb-vm:[data-cb-show-console] > div > div.cb-console,
-.cb-vm:[data-cb-show-repl-container] > div > div > div.cb-repl-container,
-.cb-vm:[data-cb-show-playground] > div > div > div.cb-playground {
-/*    display: block; */
-/*    display: flex; */
+.cb-vm:not([data-cb-show-console]) > div.cb-v-panes > div.cb-pane-splitter,
+.cb-vm:not([data-cb-show-playground]) > div.cb-body > div.cb-h-panes > div.cb-pane-splitter {
+    display: none;
 }
 
 .cb-header {
@@ -105,11 +183,10 @@ pre.cb-vm{
 
 .cb-repl-container .CodeMirror {
     height: 100%;
-    width: 100%;
 }
 
 .cb-repl-container .CodeMirror-scroll {
-    max-height: var(--cb-console-height);
+//    max-height: var(--cb-console-height);
 }
 
 .cb-vm[data-cb-show-header] .cb-repl-container .CodeMirror-scroll {
@@ -121,6 +198,7 @@ pre.cb-vm{
 .cb-exec-controls-buttons .cb-button.btn-secondary:active {
     background-color: #f6f6f6;
 }
+
 .cb-exec-controls-buttons .cb-button.btn-secondary:hover {
     background-color: #e0e0e0;
 }
@@ -181,11 +259,11 @@ pre.cb-vm{
 }
 
 .cb-editors {
-/*    max-height: 100%; */
-/*    height: calc(100% - 13.5em - 55px); */
+//    max-height: 100%;
+//    height: calc(100% - 13.5em - 55px);
     display: flex;
     flex-direction: column;
-    justify-content: space-between;
+    justify-content: flex-start;
 /*    margin: 0; /* 1em 0.5em 0.5em 0.5em */
     margin: 0 var(--cb-margin) var(--cb-margin) var(--cb-margin);
 }
@@ -196,10 +274,11 @@ pre.cb-vm{
 
 .cb-file-tabs {
 /*    height: 2.8em; */
-    overflow: hidden;
+//    overflow: hidden;
     text-overflow: ellipsis;
     flex-wrap: nowrap;
     flex-shrink: 0;
+    height: 1.75em;/***************************/
 }
 
 /**************************/
@@ -208,8 +287,9 @@ ul.cb-file-tabs {
 }
 
 .cb-file-tab {
-    overflow: hidden;
-    height: 2.0em;
+//    overflow: hidden; /***************************/
+    margin-left: var(--cb-container-border-radius);
+    height: 1.75em;/***************************/
 }
 
 .dropdown-item[data-cb-filename] > span > .close {
@@ -229,22 +309,34 @@ ul.cb-file-tabs {
 
 .cb-file-container {
     max-height: calc(100%);
-    height: calc(100% - 1em);
+    height: calc(100% - 1.5em);
     margin: 0;
     padding: 0;
-    border: 3px solid #f6f6f6;
+    border: 3px solid var(--cb-file-container-color);
     border-radius: var(--cb-container-border-radius);
-    background-color: #f6f6f6;
+    background-color: var(--cb-file-container-color);
     position: relative;
+    display: none;
 }
 
-.cb-file-container {
-    height: calc(100% - 2em);
+.cb-file-container.active {
+    display: inline;
 }
 
 .cb-vm:not([data-cb-show-header]):not([data-cb-show-footer]) .cb-file-container .CodeMirror-scroll {
 /*    height: 100%; */
-    width: 100%;
+//    width: 100%;
+}
+
+/* Hide scrollbars for webkit */
+.cb-vm .cb-file-container .CodeMirror-scroll::-webkit-scrollbar {
+//  display: none;
+}
+
+/* Hide scrollbar for IE, Edge and Firefox */
+.cb-vm .cb-file-container .CodeMirror-scroll {
+//  -ms-overflow-style: none;  /* IE and Edge */
+//  scrollbar-width: none;  /* Firefox */
 }
 
 .cb-rename-box {
@@ -298,6 +390,63 @@ ul.cb-file-tabs {
 
 .cb-file-tab > button > svg {
     width: 1.5em;
+}
+
+.cb-file-tab > .cb-tab > span,
+.cb-file-tab > .cb-tab > input {
+  margin-left: 0.5em;
+  margin-right: 0.5em;
+  padding: 0;
+  border: 0;
+  background-color: inherit;
+  color: #bbb;
+  white-space: pre;
+}
+
+.cb-file-tab.active > .cb-tab > span,
+.cb-file-tab.active > .cb-tab > input {
+  color: black;
+}
+
+.cb-file-tab > .cb-tab > span {
+  -webkit-touch-callout: none;
+    -webkit-user-select: none;
+     -khtml-user-select: none;
+       -moz-user-select: none;
+        -ms-user-select: none;
+            user-select: none;
+}
+
+.cb-file-tab > .cb-tab > input {
+    width: 20em;
+}
+
+.cb-file-tab:not([data-cb-editing]) > .cb-tab > span,
+.cb-file-tab[data-cb-editing] > .cb-tab > input {
+    display: inline;
+}
+.cb-file-tab:not([data-cb-editing]) > .cb-tab > input,
+.cb-file-tab[data-cb-editing] > .cb-tab > span {
+    display: none;
+}
+
+.cb-file-tab[data-cb-file-tab-extension=".csv"] > div > .cb-file-tab-editor-view,
+.cb-file-tab[data-cb-file-tab-extension=".tsv"] > div > .cb-file-tab-editor-view {
+    display: inline;
+}
+
+.cb-file-tab:not([data-cb-file-tab-extension=".csv"]):not([data-cb-file-tab-extension=".tsv"]) > div > .cb-file-tab-editor-view {
+    display: none;
+}
+
+.cb-file-tab:[data-cb-editor-view="text"] > div > .cb-file-tab-editor-view > a[data-cb-file-tab-editor-view="text"] > svg,
+.cb-file-tab:[data-cb-editor-view="spreadsheet"] > div > .cb-file-tab-editor-view > a[data-cb-file-tab-editor-view="spreadsheet"] > svg {
+    visibility: visible;
+}
+
+.cb-file-tab:not([data-cb-editor-view="text"]) > div > .cb-file-tab-editor-view > a[data-cb-file-tab-editor-view="text"] > svg,
+.cb-file-tab:not([data-cb-editor-view="spreadsheet"]) > div > .cb-file-tab-editor-view > a[data-cb-file-tab-editor-view="spreadsheet"] > svg {
+    visibility: hidden;
 }
 
 .cb-resize-handle > svg {
@@ -427,8 +576,10 @@ ul.cb-file-tabs {
     transition: filter 200ms ease-out;
 }
 
-.cb-button {
+.cb-button,
+.cb-tab {
     border: 0;
+    outline: none;
 }
 
 .cb-button:active {
@@ -453,12 +604,22 @@ ul.cb-file-tabs {
 .cb-svg-mail,
 .cb-svg-clipboard,
 .cb-svg-close,
+.cb-svg-rename,
 .cb-svg-checkmark {
     width: 1em;
 }
 
-.cb-file-selection .cb-file-new {
+.cb-svg-udem-logo {
+    width: 10em;
+}
+
+.cb-file-selection .cb-file-new,
+.cb-file-selection .cb-reset-filesystem {
     font-weight: bold;
+}
+
+.cb-vm:not([data-cb-dev-mode]) .cb-file-selection .cb-reset-filesystem {
+    display: none;
 }
 
 .cb-menu-file .dropdown-item .cb-file-buttons {
@@ -522,12 +683,11 @@ ul.cb-file-tabs {
 
 .cb-file-tabs > .cb-file-tab {
     border-bottom: 0;
-    border-top: 1px solid #f6f6f6;
-    border-left: 1px solid #f6f6f6;
-    border-right: 1px solid #f6f6f6;
-    background-color: #fdfdfd;
+    border-top: 1px solid var(--cb-file-container-color);
+    border-left: 1px solid var(--cb-file-container-color);
+    border-right: 1px solid var(--cb-file-container-color);
+    background-color: var(--cb-file-tab-inactive-color);
     color: #ccc;
-    margin-right: 1em;
     display: flex;
     border-top-left-radius: var(--cb-file-tab-border-radius);
     border-top-right-radius: var(--cb-file-tab-border-radius);
@@ -535,9 +695,8 @@ ul.cb-file-tabs {
 
 .cb-file-tabs > .cb-file-tab.active,
 .cb-file-tabs > .cb-file-tab.active:hover {
-    border: 0;
     color: black;
-    background-color: #f6f6f6;
+    background-color: var(--cb-file-container-color);
 }
 
 .cb-file-tabs > .cb-file-tab > button.close {
@@ -582,11 +741,22 @@ ul.cb-file-tabs {
     opacity: 1;
 }
 
+.cb-file-container:not([data-cb-editor-view="text"]) > .CodeMirror,
+.cb-file-container:not([data-cb-editor-view="text"]) > .cb-file-text-editor,
+.cb-file-container:not([data-cb-editor-view="spreadsheet"]) > .cb-file-spreadsheet-editor {
+    display: none;
+}
+
+.cb-file-container[data-cb-editor-view="spreadsheet"] {
+    overflow: scroll;
+}
+
 /*--------------------------- CodeMirror ----------------------------*/
 
 
 .cb-file-container .CodeMirror {
-    height: 100%;
+//    height: 100%;
+    height: calc(100% - 40px); /* ugly hack to prevent navigation bar from scrolling off screen */
 }
 
 .cb-vm .CodeMirror-matchingbracket {
@@ -777,7 +947,7 @@ ul.cb-file-tabs {
 
 .cb-v-panes > .cb-pane-elastic,
 .cb-h-panes > .cb-pane-elastic {
-    flex: 1 0;
+    flex: 1 1;
 /*    margin: 0; */
 }
 

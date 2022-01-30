@@ -32,7 +32,7 @@ bundle: codeboot.bundle.css codeboot.bundle.js
 	# We probably should move away from inliner eventually...
 	inliner index.html | awk -v RS="\0" -v ORS="" '{gsub(/~~s\ns~~/," nl ")}7' > codeboot_bundle.html
 
-codeboot.bundle.css: include/bootstrap-4.5.0-dist/css/bootstrap.min.css include/codemirror-5.56.0/lib/codemirror.css include/codemirror-5.56.0/addon/dialog/dialog.css include/codeboot.css
+codeboot.bundle.css: include/bootstrap-4.5.0-dist/css/bootstrap.min.css include/codemirror-5.56.0/lib/codemirror.css include/codemirror-5.56.0/addon/dialog/dialog.css jspreadsheet-4.9.11/dist/jspreadsheet.css jsuites-4.9.34/dist/jsuites.css include/codeboot.css
 	@echo "*** Building codeboot.bundle.css"
 	@rm -f $@
 	@touch $@

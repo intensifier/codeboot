@@ -75,12 +75,12 @@ CodeBootVM.prototype.serializeState = function () {
 
     state.files = vm.fs.serialize();
     state.openEditors = [];
-    vm.fs.forEachEditor(function (editor) {
-        state.openEditors.push(editor.file.filename);
+    vm.fs.forEachFileEditor(function (fe) {
+        state.openEditors.push(fe.file.filename);
     });
     state.activeEditor = null;
     if (vm.fs.fem.activated >= 0) {
-        state.activeEditor = vm.fs.fem.editors[vm.fs.fem.activated].file.filename;
+        state.activeEditor = vm.fs.fem.fileEditors[vm.fs.fem.activated].file.filename;
     }
 
     return state;
