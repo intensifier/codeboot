@@ -9016,7 +9016,7 @@ def make_module_csv():
                 return sem_raise_with_message(ctx, class_TypeError, no_write_method_msg)
 
         def catch_AttributeError(exn):
-            if om_isinstance(exc, class_AttributeError):
+            if om_isinstance(exn, class_AttributeError):
                 return sem_raise_with_message(ctx, class_TypeError, no_write_method_msg)
             else:
                 return sem_raise_unsafe(ctx.rte, exn)
