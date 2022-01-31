@@ -23,8 +23,14 @@ const codebootCharts = (function () {
   //        empty refers to a quantitative value
   // yDesc: 'field_name:field_type', same as xDesc.
   // zDesc: 'field_name', treats z dimension as a color for multi-line charts.
-  function plot(data, markType, title, xDesc, yDesc, zDesc) {
-    var chart = document.getElementsByClassName('cb-html-window')[0];
+  function chart(args) {
+    // It's simpler passing an argument array from pyinterp
+    var data, markType, title, xDesc, yDesc, zDesc;
+    // Convert to JS objects with FFI util
+    args = pyinterp.OM_get_list_seq(args).map(py2host);
+    [data, markType, title, xDesc, yDesc, zDesc] = args;
+
+    var chart = document.getElementsByClassName('cb-chart-window')[0];
 
     var _data = list_conv(data);
 
@@ -121,6 +127,8 @@ const codebootCharts = (function () {
   }
 
   return {
-    plot
+    chart
   }
 })();
+
+const runtime_chart = codebootCharts.chart;
