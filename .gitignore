@@ -8,8 +8,8 @@ pyinterp/venv
 pyinterp/etc/zp/test/pyinterp/pyinterp_browser.js
 
 # codeBoot bundles
-codeboot.bundle.css
-codeboot.bundle.js
+# codeboot.bundle.css
+# codeboot.bundle.js
 codeboot_bundle.html
 
 # codeBoot py language
