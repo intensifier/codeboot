@@ -85,18 +85,18 @@ CodeBootVM.prototype.codeHighlight = function (loc, cssClass, markEnd) {
 
         if (end.ch < 0) return;
 
-        eol = textEditor.addLineClass(end.line-1, 'text', cssClass+'-eol');
+        eol = textEditor.cb.cm.addLineClass(end.line-1, 'text', cssClass+'-eol');
 
     } else {
 
-        allMarker = textEditor.markText(start, end, { 'className': cssClass });
+        allMarker = textEditor.cb.cm.markText(start, end, { 'className': cssClass });
         allMarker.cb_textEditor = textEditor;
 
         if (markEnd) {
             // mark the last character (useful for pointing bubble to it)
             start.line = end.line;
             start.ch = end.ch-1;
-            endMarker = textEditor.markText(start, end, { 'className': cssClass+'-end' });
+            endMarker = textEditor.cb.cm.markText(start, end, { 'className': cssClass+'-end' });
             endMarker.cb_textEditor = textEditor;
         }
     }
@@ -147,10 +147,12 @@ function toSafeBase64FromUint8Array(bytes) {
 }
 
 function fromSafeBase64(b64) {
+//    console.log(b64);
     return decodeURIComponent(escape(atob(convertFromSafeBase64(b64))));
 }
 
 function fromSafeBase64ToUint8Array(b64) {
+//    console.log(b64);
     var str = atob(convertFromSafeBase64(b64));
     var len = str.length;
     var bytes = new Uint8Array(len);
@@ -282,11 +284,11 @@ CodeBootVM.prototype.replay = function () {
                 var replace = true;
                 if (existing &&
                     filename !== default_filename &&
-                    textEditor.getValue() !== str) {
+                    textEditor.cb.cm.getValue() !== str) {
                     replace = confirm('You are about to replace the file "' + filename + '" with different content.  Are you sure you want to proceed with the replacement and lose your local changes to that file?');
                 }
                 if (replace) {
-                    textEditor.setValue(str);
+                    textEditor.cb.cm.setValue(str);
                     vm.showTryMeTooltip();
                 }
                 j += 2;
@@ -1014,7 +1016,7 @@ CodeBootVM.prototype.clearMarker = function (marker) {
         marker.all.clear();
     }
     if (marker.eol !== null) {
-        marker.textEditor.removeLineClass(marker.eol, 'text');
+        marker.textEditor.cb.cm.removeLineClass(marker.eol, 'text');
     }
     if (marker.end !== null) {
         marker.end.clear();
@@ -1039,8 +1041,8 @@ CodeBootVM.prototype.within = function (rect, viewport) {
 
 CodeBootVM.prototype.isCharacterVisible = function (pos, textEditor) {
     var vm = this;
-    var point = textEditor.charCoords(pos, 'local');
-    var scrollInfo = textEditor.getScrollInfo();
+    var point = textEditor.cb.cm.charCoords(pos, 'local');
+    var scrollInfo = textEditor.cb.cm.getScrollInfo();
     return vm.within(point, scrollInfo);
 };
 
@@ -1060,10 +1062,10 @@ CodeBootVM.prototype.scrollToMarker = function (marker, textEditor) {
     if (!vm.isMarkerVisible(marker, textEditor)) {
         var range = marker.find();
         if (range) {
-            var rect = textEditor.charCoords(range.from, 'local');
-            var scrollInfo = textEditor.getScrollInfo();
-            //textEditor.scrollIntoView(rect, 0.5 * scrollInfo.clientHeight);
-            textEditor.scrollIntoView(rect, 0.1 * scrollInfo.clientHeight);
+            var rect = textEditor.cb.cm.charCoords(range.from, 'local');
+            var scrollInfo = textEditor.cb.cm.getScrollInfo();
+            //textEditor.cb.cm.scrollIntoView(rect, 0.5 * scrollInfo.clientHeight);
+            textEditor.cb.cm.scrollIntoView(rect, 0.1 * scrollInfo.clientHeight);
        }
     }
 };

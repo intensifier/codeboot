@@ -1,9 +1,10 @@
-CodeBootVM.prototype.initTextEditor = function (textEditor, node, history, file) {
+CodeBootVM.prototype.initTextEditor = function (textEditor, cm, elem, history, file) {
 
     var vm = this;
 
     textEditor.cb = {};
-    textEditor.cb.node = node;
+    textEditor.cb.elem = elem;
+    textEditor.cb.cm = cm;
     textEditor.cb.vm = vm;
     textEditor.cb.hm = history;
     textEditor.cb.file = file;
@@ -23,7 +24,7 @@ CodeBootVM.prototype.trackTextEditorFocus = function (textEditor, focus) {
 
     if (focus) {
         vm.lastFocusedEditor = textEditor;
-        if (textEditor === vm.repl) {
+        if (textEditor.cb.cm === vm.repl) {
             vm.setAttribute('data-cb-focus-repl', true);
         } else {
             vm.setAttribute('data-cb-focus-repl', false);
@@ -39,11 +40,11 @@ CodeBootVM.prototype.initTextEditorFocusHandling = function (textEditor) {
 
     var vm = this;
 
-    textEditor.on('focus', function (cm, event) {
+    textEditor.cb.cm.on('focus', function (cm, event) {
         vm.trackTextEditorFocus(textEditor, true);
     });
 
-    textEditor.on('blur', function (cm, event) {
+    textEditor.cb.cm.on('blur', function (cm, event) {
         vm.trackTextEditorFocus(textEditor, false);
     });
 };
@@ -52,7 +53,7 @@ CodeBootVM.prototype.initTextEditorScrollHandling = function (textEditor) {
 
     var vm = this;
 
-    textEditor.on('scroll', function (cm) {
+    textEditor.cb.cm.on('scroll', function (cm) {
         vm.updatePopupPos();
     });
 
@@ -61,6 +62,138 @@ CodeBootVM.prototype.initTextEditorScrollHandling = function (textEditor) {
 // Disable Ctrl-V and Ctrl-X keybindings that users expect to map to paste/cut
 delete CodeMirror.keyMap.emacs['Ctrl-V'];
 delete CodeMirror.keyMap.emacs['Ctrl-X'];
+
+function CodeBootTextEditor(elem, file) {
+
+    var te = this;
+    var vm = file.fs.vm;
+
+    function enter(cm) {
+        if (!vm.isRunning()) {
+            return CodeMirror.Pass;
+        }
+        vm.eventEval();
+    };
+
+    function shiftEnter(cm) {
+        vm.eventStepPause();
+    };
+
+    var rulers = [{color: '#000', column: 79, lineStyle: 'dashed'}];
+
+    var options = {
+        value: file.content,
+        lineNumbers: vm.showLineNumbers,
+        cursorScrollMargin: 0,
+//        scrollbarStyle: 'null', // avoid 2 scrollbars... why needed?
+        gutters: ['CodeMirror-linenumbers', 'cb-file-cm-gutter'],
+        fixedGutter: false,
+        matchBrackets: true,
+        rulers: rulers,
+        keyMap: 'emacs',
+        extraKeys: {
+
+            //TODO: reenable
+            //'Ctrl-/' : function (cm) {
+            //    var tok = cm.getTokenAt(cm.getCursor(false));
+            //    var isComment = tok.className === 'comment';
+            //    cm.commentRange(!isComment, cm.getCursor(true), cm.getCursor(false));
+            // },
+
+            'Ctrl-L': function (cm) { vm.eventClearConsole(); },
+            'Shift-Ctrl-/': function (cm) { vm.toggleDevMode(); },
+            'Esc': function (cm) { vm.eventStop(); },
+            'Enter': enter,
+            'Shift-Enter': shiftEnter,
+            'Shift-Ctrl-Enter': function (cm) { vm.eventEval(); },
+            'F5' : function (cm) { vm.eventStepPause(); },
+            'F6' : function (cm) { vm.eventAnimate(); },
+            'F7' : function (cm) { vm.eventEval(); },
+            'F8' : function (cm) { vm.eventStop(); }
+        },
+        dragDrop: false,
+        //,viewportMargin: Infinity
+    };
+
+    vm.adjustTextEditorOptions(options);
+
+    var cm = CodeMirror.fromTextArea(elem, options);
+
+    if (file.cursor) {
+        cm.setCursor(file.cursor);
+    }
+
+    te.cm = cm;
+
+    vm.lang.setupEditor(cm);
+
+    vm.initTextEditor(te, cm, elem, null, file);
+    vm.initTextEditorFocusHandling(te);
+    vm.initTextEditorScrollHandling(te);
+}
+
+CodeBootTextEditor.prototype.focus = function () {
+
+    var te = this;
+
+    te.cm.focus();
+};
+
+CodeBootTextEditor.prototype.refresh = function () {
+
+    var te = this;
+
+    console.log('CodeBootTextEditor.prototype.refresh');
+
+    te.cm.refresh();
+};
+
+CodeBootTextEditor.prototype.setOption = function (name, val) {
+
+    var te = this;
+
+    console.log('CodeBootTextEditor.prototype.setOption');
+
+    te.cm.setOption(name, val);
+};
+
+CodeBootTextEditor.prototype.setReadOnly = function (readOnly) {
+
+    var te = this;
+
+    console.log('CodeBootTextEditor.prototype.setReadOnly('+readOnly+')');
+
+    te.cm.setOption('readOnly', readOnly);
+    te.cm.setOption('matchBrackets', !readOnly);
+};
+
+CodeBootTextEditor.prototype.getValue = function () {
+
+    var te = this;
+
+    val = te.cm.getValue();
+    console.log('CodeBootTextEditor.prototype.getValue');
+    console.log(val);
+    return val;
+    return te.cm.getValue();
+};
+
+CodeBootTextEditor.prototype.setValue = function (val) {
+
+    var te = this;
+
+    console.log('CodeBootTextEditor.prototype.setValue');
+    console.log(val);
+
+    te.cm.setValue(val);
+};
+
+CodeBootTextEditor.prototype.setCursor = function (cursor) {
+
+    var te = this;
+
+    te.cm.setCursor(cursor);
+};
 
 CodeBootVM.prototype.createCodeEditor = function (node, file) {
 
@@ -119,7 +252,7 @@ CodeBootVM.prototype.createCodeEditor = function (node, file) {
 
     vm.lang.setupEditor(textEditor);
 
-    vm.initTextEditor(textEditor, node, null, file);
+    vm.initTextEditor(textEditor, textEditor, node, null, file);
     vm.initTextEditorFocusHandling(textEditor);
     vm.initTextEditorScrollHandling(textEditor);
 
@@ -300,7 +433,7 @@ CodeBootVM.prototype.createREPLTranscript = function () {
 
     var textEditor = CodeMirror(node, options);
 
-    vm.initTextEditor(textEditor, node, null, null);
+    vm.initTextEditor(textEditor, textEditor, node, null, null);
     vm.initTextEditorScrollHandling(textEditor);
 
     return new CodeBootTranscript(textEditor);
@@ -426,9 +559,9 @@ CodeBootVM.prototype.setReadOnly = function (textEditor, val) {
 
     var vm = this;
 
-    if (textEditor) {
-        textEditor.setOption('readOnly', val);
-        textEditor.setOption('matchBrackets', !val);
+    if (textEditor.cb.cm) {
+        textEditor.cb.cm.setOption('readOnly', val);
+        textEditor.cb.cm.setOption('matchBrackets', !val);
     }
 };
 
@@ -541,7 +674,7 @@ CodeBootVM.prototype.replSetup = function () {
 
         vm.repl = textEditor;
 
-        vm.initTextEditor(textEditor, node, new CodeBootHistoryManager(textEditor), null);
+        vm.initTextEditor(textEditor, textEditor, node, new CodeBootHistoryManager(textEditor), null);
         vm.initTextEditorFocusHandling(textEditor);
         vm.initTextEditorScrollHandling(textEditor);
     }
@@ -564,7 +697,7 @@ CodeBootVM.prototype.replCursorOnFirstColumnOfInput = function () {
     var vm = this;
     var textEditor = vm.repl;
 
-    return textEditor.getCursor().ch === 0;
+    return textEditor.cb.cm.getCursor().ch === 0;
 };
 
 CodeBootVM.prototype.replCursorOnFirstLineOfInput = function () {
@@ -572,8 +705,8 @@ CodeBootVM.prototype.replCursorOnFirstLineOfInput = function () {
     var vm = this;
     var textEditor = vm.repl;
 
-    var cursor = textEditor.cursorCoords(textEditor.getCursor());
-    var first = textEditor.cursorCoords(vm.replInputPos());
+    var cursor = textEditor.cb.cm.cursorCoords(textEditor.cb.cm.getCursor());
+    var first = textEditor.cb.cm.cursorCoords(vm.replInputPos());
 
     return cursor.top === first.top;
 };
@@ -583,8 +716,8 @@ CodeBootVM.prototype.replCursorOnLastLineOfInput = function () {
     var vm = this;
     var textEditor = vm.repl;
 
-    var cursor = textEditor.cursorCoords(textEditor.getCursor());
-    var last = textEditor.cursorCoords({ line: textEditor.lastLine()+1, ch: 0 });
+    var cursor = textEditor.cb.cm.cursorCoords(textEditor.cb.cm.getCursor());
+    var last = textEditor.cb.cm.cursorCoords({ line: textEditor.cb.cm.lastLine()+1, ch: 0 });
 
     return cursor.top === last.top;
 };
@@ -594,7 +727,7 @@ CodeBootVM.prototype.replCursorPos = function () {
     var vm = this;
     var textEditor = vm.repl;
 
-    return textEditor.getCursor();
+    return textEditor.cb.cm.getCursor();
 };
 
 CodeBootVM.prototype.replNewline = function () {
@@ -607,7 +740,7 @@ CodeBootVM.prototype.replNewline = function () {
 
     var first = vm.replCursorOnFirstLineOfInput();
     vm.replAddInputLine('', first, false);
-    textEditor.execCommand('indentAuto');
+    textEditor.cb.cm.execCommand('indentAuto');
 };
 
 CodeBootVM.prototype.replAcceptInput = function () {
@@ -623,11 +756,11 @@ CodeBootVM.prototype.replAcceptInput = function () {
 
     // avoid empty lines that prevent prompt from showing
     if (nl === input.length-1)
-        textEditor.replaceRange('\f', vm.endOfEditor(), vm.endOfEditor());
+        textEditor.cb.cm.replaceRange('\f', vm.endOfEditor(), vm.endOfEditor());
 
     vm.replAddPrompt2(nl >= 0); // set prompt of last line of input
 
-    textEditor.replaceRange('\n', vm.endOfEditor(), vm.endOfEditor());
+    textEditor.cb.cm.replaceRange('\n', vm.endOfEditor(), vm.endOfEditor());
 */
     vm.replAddInputLine('',
                         vm.replCursorOnFirstLineOfInput(),
@@ -658,7 +791,7 @@ CodeBootVM.prototype.replEmptyInput = function () {
 
     var transcriptPos = textEditor.cb.transcriptMarker.find();
     var start = transcriptPos ? transcriptPos.to : vm.beginningOfEditor();
-    var cursor = textEditor.getCursor();
+    var cursor = textEditor.cb.cm.getCursor();
     return start.line === cursor.line;
 };
 
@@ -668,8 +801,8 @@ CodeBootVM.prototype.replGetTranscript = function () {
     var textEditor = vm.repl;
 
 //    console.log('replGetTranscript');
-//    return textEditor.getRange(vm.beginningOfEditor(), vm.endOfEditor());
-    return textEditor.display.wrapper.innerText;
+//    return textEditor.cb.cm.getRange(vm.beginningOfEditor(), vm.endOfEditor());
+    return textEditor.cb.cm.display.wrapper.innerText;
 };
 
 CodeBootVM.prototype.replGetInput = function () {
@@ -678,7 +811,7 @@ CodeBootVM.prototype.replGetInput = function () {
     var textEditor = vm.repl;
 
 //    console.log('replGetInput');
-    return textEditor.getRange(vm.replInputPos(), vm.endOfEditor());
+    return textEditor.cb.cm.getRange(vm.replInputPos(), vm.endOfEditor());
 };
 
 CodeBootVM.prototype.replSetCursorToEnd = function () {
@@ -686,7 +819,7 @@ CodeBootVM.prototype.replSetCursorToEnd = function () {
     var vm = this;
     var textEditor = vm.repl;
 
-    textEditor.setCursor(vm.endOfEditor());
+    textEditor.cb.cm.setCursor(vm.endOfEditor());
     vm.replScrollToEnd();
 //    console.log('did replSetCursorToEnd();');
 };
@@ -701,14 +834,14 @@ CodeBootVM.prototype.replSetInput = function (text) {
 
     var lines = text.split('\n');
 
-    textEditor.replaceRange('', vm.replInputPos(), vm.endOfEditor());
+    textEditor.cb.cm.replaceRange('', vm.replInputPos(), vm.endOfEditor());
 
     for (var i=0; i<lines.length; i++) {
         vm.replAddInputLine(lines[i], i === 0, i === lines.length-1);
     }
 
     vm.replSetCursorToEnd();
-//    textEditor.setCursor(vm.endOfEditor());
+//    textEditor.cb.cm.setCursor(vm.endOfEditor());
 
 //TODO: deprecated
 //    cm.setValue(text);
@@ -723,14 +856,14 @@ CodeBootVM.prototype.replAddInputLine = function (line, first, last) {
     var addSpace = (line === '' && !last);
     if (addSpace) line += ' '; // on empty line: add then remove space
                                // to avoid hidden gutter bug
-    textEditor.replaceRange(line,
-                            textEditor.getCursor(),
-                            textEditor.getCursor());
+    textEditor.cb.cm.replaceRange(line,
+                                  textEditor.cb.cm.getCursor(),
+                                  textEditor.cb.cm.getCursor());
     vm.replAddPrompt2(!first); // normal or continuation prompt
     if (!last) {
-        textEditor.replaceRange('\n',
-                                vm.getOffsetFromCursor(textEditor,addSpace?-1:0),
-                                textEditor.getCursor());
+        textEditor.cb.cm.replaceRange('\n',
+                                      vm.getOffsetFromCursor(textEditor,addSpace?-1:0),
+                                      textEditor.cb.cm.getCursor());
     }
 };
 
@@ -745,7 +878,7 @@ CodeBootVM.prototype.replReplaceInput = function (text) {
     if (!textEditor) return;
 
     var lines = text.split('\n');
-    textEditor.replaceRange(text, vm.replInputPos(), vm.endOfEditor());
+    textEditor.cb.cm.replaceRange(text, vm.replInputPos(), vm.endOfEditor());
 };
 */
 
@@ -757,7 +890,7 @@ CodeBootVM.prototype.replReset = function () {
 //    console.log('replReset');
     if (!textEditor) return;
 
-    textEditor.setValue('');
+    textEditor.cb.cm.setValue('');
     vm.setTranscriptMarker(textEditor, vm.beginningOfEditor());
     vm.replAllowInput();
     vm.repl.cb.hm.resetPos();
@@ -773,7 +906,7 @@ CodeBootVM.prototype.setTranscriptMarker = function (textEditor, endPos) {
     }
 
     textEditor.cb.transcriptMarker =
-        textEditor.markText(
+        textEditor.cb.cm.markText(
             vm.beginningOfEditor(),
             endPos,
             { className: 'cb-transcript',
@@ -811,13 +944,13 @@ CodeBootVM.prototype.replAddPrompt = function () {
 //    if (text !== undefined)
 //        vm.replSetInput(text);
 
-    var line = textEditor.lastLine();
+    var line = textEditor.cb.cm.lastLine();
 
     var elem = document.createElement('div');
     elem.innerText = vm.replEmptyInput()
                      ? vm.lang.getPrompt()
                      : vm.lang.getPromptCont();
-    textEditor.setGutterMarker(line, 'cb-repl-cm-gutter', elem);
+    textEditor.cb.cm.setGutterMarker(line, 'cb-repl-cm-gutter', elem);
 
     vm.replSetCursorToEnd();
 };
@@ -833,13 +966,13 @@ CodeBootVM.prototype.replAddPrompt2 = function (cont) {
     var cursor = vm.replCursorPos();
     var elem = document.createElement('div');
     elem.innerText = cont ? vm.lang.getPromptCont() : vm.lang.getPrompt()
-    textEditor.setGutterMarker(cursor.line, 'cb-repl-cm-gutter', elem);
-    textEditor.refresh();
+    textEditor.cb.cm.setGutterMarker(cursor.line, 'cb-repl-cm-gutter', elem);
+    textEditor.cb.cm.refresh();
 };
 
 CodeBootVM.prototype.scrollToEnd = function (textEditor) {
     var vm = this;
-    CodeMirror.commands.goDocEnd(textEditor);
+    CodeMirror.commands.goDocEnd(textEditor.cb.cm);
 };
 
 CodeBootVM.prototype.replScrollToEnd = function () {
@@ -857,21 +990,21 @@ CodeBootVM.prototype.beginningOfEditor = function () {
 };
 
 CodeBootVM.prototype.beginningOfLastLineOfEditor = function (textEditor) {
-    return { line: textEditor.lastLine(), ch: 0 };
+    return { line: textEditor.cb.cm.lastLine(), ch: 0 };
 };
 
 CodeBootVM.prototype.offsetFromEndOfEditor = function (textEditor, offset) {
-    var pos = textEditor.posFromIndex(Infinity); // get end line/ch
+    var pos = textEditor.cb.cm.posFromIndex(Infinity); // get end line/ch
     if (offset === 0) return pos;
-    var ind = textEditor.indexFromPos(pos); // get actual index
-    return textEditor.posFromIndex(ind + offset);
+    var ind = textEditor.cb.cm.indexFromPos(pos); // get actual index
+    return textEditor.cb.cm.posFromIndex(ind + offset);
 };
 
 CodeBootVM.prototype.getOffsetFromCursor = function (textEditor, offset) {
-    var pos = textEditor.getCursor(); // get end line/ch
+    var pos = textEditor.cb.cm.getCursor(); // get end line/ch
     if (offset === 0) return pos;
-    var ind = textEditor.indexFromPos(pos); // get actual index
-    return textEditor.posFromIndex(ind + offset);
+    var ind = textEditor.cb.cm.indexFromPos(pos); // get actual index
+    return textEditor.cb.cm.posFromIndex(ind + offset);
 };
 
 CodeBootVM.prototype.endOfEditor = function () {
@@ -888,22 +1021,22 @@ CodeBootVM.prototype.replAddSingleLineTranscript = function (text, cssClass) {
     var transcriptPos = textEditor.cb.transcriptMarker.find();
     var pos = transcriptPos ? transcriptPos.to : vm.beginningOfEditor();
 
-    textEditor.replaceRange(text, pos); //TODO: why is this so slow?
+    textEditor.cb.cm.replaceRange(text, pos); //TODO: why is this so slow?
 
-    textEditor.markText(pos, vm.nextLineStart(pos), { className: cssClass });
+    textEditor.cb.cm.markText(pos, vm.nextLineStart(pos), { className: cssClass });
 
     vm.replSetReadOnlyTranscript(vm.nextLineStart(pos));
 
     vm.replScrollToEnd();
     
-//    if (textEditor.lineInfo(line).gutterMarkers) {
+//    if (textEditor.cb.cm.lineInfo(line).gutterMarkers) {
 //        // Oops, CodeMirror moved the gutter down instead of appending a blank line
 //        // We'll set the gutter back on the previous line (ugly!)
 //        line -= 1;
 //    }
 
 //    if (cssClass === 'transcript-input')
-//        textEditor.setGutterMarker(line, 'cb-repl-cm-gutter', document.createTextNode('>'));
+//        textEditor.cb.cm.setGutterMarker(line, 'cb-repl-cm-gutter', document.createTextNode('>'));
 
 //    this.is_empty = false;
 
@@ -923,9 +1056,9 @@ CodeBootVM.prototype.replAddLineWidgetTranscript = function (widget) {
 
     var transcriptPos = textEditor.cb.transcriptMarker.find();
     var pos = transcriptPos ? transcriptPos.to : vm.beginningOfEditor();
-    var w = textEditor.addLineWidget(pos.line-1, widget);
-//    var w = textEditor.addWidget(vm.lastLinePos(vm.repl), widget, false);
-//    var w = textEditor.addLineWidget(textEditor.lineCount() - 2, widget);
+    var w = textEditor.cb.cm.addLineWidget(pos.line-1, widget);
+//    var w = textEditor.cb.cm.addWidget(vm.lastLinePos(vm.repl), widget, false);
+//    var w = textEditor.cb.cm.addLineWidget(textEditor.cb.cm.lineCount() - 2, widget);
     textEditor.cb.widgets.push(w);
 
     vm.replScrollToEnd();

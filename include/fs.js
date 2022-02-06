@@ -179,8 +179,106 @@ CodeBootFileSystem.prototype.init = function () {
     var fs = this;
 
     fs.removeAllFileEditors();
+    fs.initFileTabs();
     fs.clear();
     fs.rebuildFileMenu();
+};
+
+CodeBootFileSystem.prototype.initFileTabs = function () {
+
+    var fs = this;
+    var vm = fs.vm;
+
+    vm.withElem('.cb-file-tabs', function (tabsElem) {
+        var sentinelTab = document.createElement('li');
+        sentinelTab.className = 'cb-file-tab';
+        sentinelTab.innerHTML = '<div class="cb-tab-spacer"></div>';
+        tabsElem.innerHTML = '';
+        tabsElem.appendChild(sentinelTab);
+        fs.setupTabDragAndDrop(sentinelTab, null);
+    });
+};
+
+CodeBootFileSystem.prototype.setupTabDragAndDrop = function (fileTab, fe) {
+
+    var fs = this;
+
+    var dragoverNest = 0;
+
+    function resetDragoverNest() {
+        dragoverNest = 0;
+        fileTab.classList.remove('cb-drag-over');
+    }
+
+    function handleDragStart(event) {
+        var file = fe.file;
+        var dt = event.dataTransfer;
+        dt.effectAllowed = 'copyMove';
+        var shareableData = file.getShareableData();
+        for (var i=0; i<shareableData.length; i++) {
+            dt.setData(shareableData[i][0], shareableData[i][1]);
+        }
+        dt.setData('text/codeboot-file-name', file.filename);
+        fileTab.classList.add('cb-dragging');
+    }
+
+    function handleDragEnd(event) {
+        fileTab.classList.remove('cb-dragging');
+    }
+
+    function handleDragEnter(event) {
+        if (dragoverNest++ === 0) {
+            fileTab.classList.add('cb-drag-over');
+        }
+    }
+
+    function handleDragLeave(event) {
+        if (--dragoverNest === 0) {
+            resetDragoverNest();
+        }
+    }
+
+    function handleDragOver(event) {
+        if (event.dataTransfer.getData('text/codeboot-file-name') !== '') {
+            return false;
+        }
+    }
+
+    function handleDrop(event) {
+        resetDragoverNest();
+        event.stopPropagation(); // stops the browser from redirecting.
+        var dt = event.dataTransfer;
+        var sourceFilename = event.dataTransfer.getData('text/codeboot-file-name');
+        if (sourceFilename === '') {
+            var vm = fs.vm;
+            if (vm.editable) {
+                vm.menuFileDrop(event);
+            }
+            event.preventDefault();
+        } else {
+            var parent = fileTab.parentNode;
+            var index = Array.prototype.indexOf.call(parent.childNodes, fileTab);
+            var fem = fs.fem;
+            fem.moveTabs(fem.indexOfFilename(sourceFilename), index);
+        }
+        return false;
+    }
+
+    function ignore(event) {
+        event.preventDefault();
+//        event.stopPropagation();
+        return false;
+    }
+
+    if (fe) {
+        fileTab.addEventListener('dragstart', handleDragStart);
+        fileTab.addEventListener('dragend', handleDragEnd);
+    }
+
+    fileTab.addEventListener('dragenter', handleDragEnter);
+    fileTab.addEventListener('dragleave', handleDragLeave);
+    fileTab.addEventListener('dragover', handleDragOver);
+    fileTab.addEventListener('drop', handleDrop);
 };
 
 CodeBootFileSystem.prototype.clear = function () {
@@ -569,25 +667,47 @@ CodeBootVM.prototype.copyTextToClipboard = function (text) {
     document.body.removeChild(textArea);
 };
 
-CodeBootFile.prototype.copyToClipboard = function () {
+/*
+CodeBootFile.prototype.copyToClipboardOld = function () {
 
     var file = this;
     var filename = file.filename;
-    var richText = file.toRichText();
-    var content = file.getContent();
+    var shareableData = file.getShareableData();
 
     function handler(event) {
-        if (richText) event.clipboardData.setData('text/html', richText);
-        event.clipboardData.setData('text/plain', content);
+        for (var i=0; i<shareableData.length; i++) {
+            event.clipboardData.setData(shareableData[i][0], shareableData[i][1]);
+        }
         event.preventDefault();
-  }
+    }
 
     document.addEventListener('copy', handler);
     document.execCommand('copy');
     document.removeEventListener('copy', handler);
 };
+*/
 
-CodeBootFile.prototype.toRichText = function () {
+CodeBootFile.prototype.copyToClipboard = function () {
+
+    var file = this;
+    var shareableData = file.getShareableData();
+
+    var data = {};
+
+    for (var i=0; i<shareableData.length; i++) {
+        data[shareableData[i][0]] = shareableData[i][1];
+    }
+
+    try {
+        navigator.clipboard.write([
+            new ClipboardItem(data)
+        ]);
+    } catch (err) {
+        console.error(err.name, err.message);
+    }
+};
+
+CodeBootFile.prototype.toHTMLText = function () {
 
     var file = this;
     var fe = file.fe;
@@ -602,10 +722,11 @@ CodeBootFile.prototype.toRichText = function () {
     } else {
 
         var styles = ['text-transform', 'color', 'font-weight'];
-        var richText = '<pre style="font-family: \'Lucida Console\', \'Hack\', Monaco, monospace; font-size: 18px;">';
+        var HTMLText = '<pre style="font-family: \'Hack\', \'Lucida Console\', Monaco, monospace; font-size: 18px;">';
+        var nbLines = textEditor.cm.lineCount();
 
-        for (var i=0; i<textEditor.lineCount(); i++) {
-            var lineTokens = textEditor.getLineTokens(i, true);
+        for (var i=0; i<nbLines; i++) {
+            var lineTokens = textEditor.cm.getLineTokens(i, true);
             for (var j=0; j<lineTokens.length; j++) {
                 var t = lineTokens[j];
                 var token = escape_HTML(t.string);
@@ -620,18 +741,42 @@ CodeBootFile.prototype.toRichText = function () {
                         css += style + ':' + compStyle.getPropertyValue(style) + ';';
                     });
 
-                    richText += '<span style="' + css + '">';
+                    HTMLText += '<span style="' + css + '">';
                 } else {
-                    richText += '<span>';
+                    HTMLText += '<span>';
                 }
-                richText += token + '</span>';
+                HTMLText += token + '</span>';
             }
-            richText += '\n';
+            if (i<nbLines-1) HTMLText += '\n';
         }
-        richText += '</pre>';
+        HTMLText += '</pre>';
 
-        return richText;
+        return HTMLText;
     }
+};
+
+CodeBootFile.prototype.getShareableData = function () {
+
+    var file = this;
+
+    var file = this;
+    var filename = file.filename;
+    var content = file.getContent();
+    var result = [];
+    var ext = file.extension(filename);
+
+    if (ext === '.csv' || ext === '.tsv') {
+        result.push(['text/csv', content]);
+    } else {
+        var HTMLText = file.toHTMLText();
+        if (HTMLText !== null) {
+            result.push(['text/html', HTMLText]);
+        }
+    }
+
+    result.push(['text/plain', content]);
+
+    return result;
 };
 
 CodeBootFileSystem.prototype.openFile = function (fileOrFilename) {
@@ -724,6 +869,21 @@ CodeBootFileEditorManager.prototype.indexOf = function (fe) {
             return i;
         }
     }
+    return -1;
+};
+
+CodeBootFileEditorManager.prototype.indexOfFilename = function (filename) {
+
+    var fem = this;
+    var fs = fem.fs;
+
+    if (fs.hasFile(filename)) {
+        var file = fs.getByName(filename);
+        if (file.fe.isEnabled()) {
+            return fem.indexOf(file.fe);
+        }
+    }
+
     return -1;
 };
 
@@ -838,6 +998,64 @@ CodeBootFileEditorManager.prototype.hide = function () {
 //    });
 };
 
+CodeBootFileEditorManager.prototype.moveTabs = function (sourceIndex, destIndex) {
+
+    var fem = this;
+    var fs = fem.fs;
+
+    if (sourceIndex >= 0 && destIndex >= 0) {
+        if (sourceIndex < destIndex) destIndex--;
+        if (sourceIndex !== destIndex) {
+
+        var vm = fem.fs.vm;
+
+        vm.withElem('.cb-file-tabs', function (tabsElem) {
+            vm.withElem('.cb-editors', function (editorsElem) {
+                var tabs = tabsElem.childNodes;
+                var editors = editorsElem.childNodes;
+                var sourceTab = tabs[sourceIndex];
+                var sourceEditor = editors[sourceIndex+1];
+                tabsElem.removeChild(sourceTab);
+                editorsElem.removeChild(sourceEditor);
+                var len = fem.fileEditors.length;
+                var fe = fem.fileEditors[sourceIndex];
+                fem.fileEditors.splice(sourceIndex, 1);
+                if (destIndex >= len-1) {
+//                    tabsElem.appendChild(sourceTab);
+                    var nextTab = tabs[destIndex];
+                    tabsElem.insertBefore(sourceTab, nextTab);
+                    editorsElem.appendChild(sourceEditor);
+                    fem.fileEditors.push(fe);
+                } else {
+                    var nextTab = tabs[destIndex];
+                    var nextEditor = editors[destIndex+1];
+                    tabsElem.insertBefore(sourceTab, nextTab);
+                    editorsElem.insertBefore(sourceEditor, nextEditor);
+                    fem.fileEditors.splice(destIndex, 0, fe);
+                }
+                // adjust index of activated editor
+                if (fem.activated !== -1) {
+                    if (fem.activated === sourceIndex) {
+                        fem.activated = destIndex;
+                    } else if (sourceIndex < destIndex) {
+                        if (fem.activated > sourceIndex &&
+                            fem.activated <= destIndex) {
+                            fem.activated--;
+                        }
+                    } else {
+                        if (fem.activated >= destIndex &&
+                            fem.activated < sourceIndex) {
+                            fem.activated++;
+                        }
+                    }
+                }
+//                fe.activate();
+            });
+        });
+        }
+    }
+};
+
 //-----------------------------------------------------------------------------
 
 function CodeBootFileEditor(file) {
@@ -899,18 +1117,20 @@ CodeBootFileEditor.prototype.removePresentation = function () {
 
     // remove file tab and file container
 
-    vm.withElem('.cb-file-tabs', function (elem) {
-        elem.removeChild(fe.fileTab);
-    });
-
-    vm.withElem('.cb-editors', function (elem) {
-        elem.removeChild(fe.fileContainer);
+    vm.withElem('.cb-file-tabs', function (tabsElem) {
+        vm.withElem('.cb-editors', function (editorsElem) {
+            tabsElem.removeChild(fe.fileTab);
+            editorsElem.removeChild(fe.fileContainer);
+        });
     });
 };
 
 CodeBootFileEditor.prototype.isEnabled = function () {
 
     var fe = this;
+
+    console.log('CodeBootFileEditor.prototype.isEnabled');
+    console.log(fe.textEditor !== null);
 
     return fe.textEditor !== null;
 };
@@ -919,20 +1139,28 @@ CodeBootFileEditor.prototype.getValue = function () {
 
     var fe = this;
 
+    val = fe.file.content;
+
     if (fe.isEnabled()) {
         if (fe.currentEditorView === 'text') {
-            return fe.textEditor.getValue();
+            val = fe.textEditor.getValue();
         } else if (fe.currentEditorView === 'spreadsheet') {
-            return fe.spreadsheetEditor.getValue();
+            val = fe.spreadsheetEditor.getValue();
         }
     }
 
-    return '';
+    console.log('CodeBootFileEditor.prototype.getValue');
+    console.log(val);
+
+    return val;
 };
 
 CodeBootFileEditor.prototype.setValue = function (val) {
 
     var fe = this;
+
+    console.log('CodeBootFileEditor.prototype.setValue');
+    console.log(val);
 
     if (fe.isEnabled()) {
         if (fe.currentEditorView === 'text') {
@@ -965,7 +1193,8 @@ CodeBootFileEditor.prototype.menuHTML = function () {
     var vm = fe.file.fs.vm;
 
     return '\
-  <div class="cb-tab" data-toggle="dropdown"><input spellcheck="false"></input><span></span></div>\
+  <div class="cb-tab-spacer"></div>\
+  <div class="cb-tab" data-toggle="dropdown" draggable="true"><input autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"></input><span></span></div>\
   <div class="dropdown-menu">\
 \
     <a href="#" class="dropdown-item" data-cb-file-tab-close>' + vm.SVG['close'] + '&nbsp;&nbsp;' + vm.polyglotHTML('Close tab') + '</a>\
@@ -994,6 +1223,9 @@ CodeBootFileEditor.prototype.menuHTML = function () {
 CodeBootFileEditor.prototype.setFilename = function (filename) {
 
     var fe = this;
+
+    console.log('CodeBootFileEditor.prototype.setFilename');
+    console.log(filename);
 
     fe.fileTabSpan.innerText = filename;
 
@@ -1030,6 +1262,8 @@ CodeBootFileEditor.prototype.enable = function () {
     var fileTabButton = fileTab.querySelector(':scope > .cb-tab');
     var fileTabInput = fileTabButton.querySelector(':scope > input');
     var fileTabSpan  = fileTabButton.querySelector(':scope > span');
+
+    fs.setupTabDragAndDrop(fileTab, fe);
 
     fileTab.querySelectorAll('.dropdown-item').forEach(function (elem) {
         elem.addEventListener('click', function (event) {
@@ -1074,23 +1308,16 @@ CodeBootFileEditor.prototype.enable = function () {
 
     // add file tab and file container
 
-    vm.withElem('.cb-file-tabs', function (elem) {
-        elem.appendChild(fileTab);
-    });
-
-    vm.withElem('.cb-editors', function (elem) {
-        elem.appendChild(fileContainer);
+    vm.withElem('.cb-file-tabs', function (tabsElem) {
+        vm.withElem('.cb-editors', function (editorsElem) {
+            tabsElem.insertBefore(fileTab, tabsElem.lastChild);
+            editorsElem.appendChild(fileContainer);
+        });
     });
 
     // create text editor
 
-    var textEditor = fe.file.fs.vm.createCodeEditor(textarea, file);
-
-    textEditor.setValue(file.content);
-
-    if (file.cursor) {
-        textEditor.setCursor(file.cursor);
-    }
+    var textEditor = new CodeBootTextEditor(textarea, file);
 
     fileTabButton.addEventListener('click', function (event) {
         if (fileTab.hasAttribute('data-cb-editing')) {
@@ -1109,7 +1336,7 @@ CodeBootFileEditor.prototype.enable = function () {
 
     // create spreadsheet editor
 
-    var spreadsheetEditor = fe.file.fs.vm.createSpreadsheetEditor(spreadsheet, fe);
+    var spreadsheetEditor = new CodeBootSpreadsheetEditor(spreadsheet, fe);
 
     // remember each element for quick access
 
@@ -1126,13 +1353,6 @@ CodeBootFileEditor.prototype.enable = function () {
 
     fe.setEditorView(file.preferredEditorView);
     fe.setFilename(filename);
-};
-
-CodeBootVM.prototype.createSpreadsheetEditor = function (elem, fe) {
-
-    var vm = this;
-
-    return new CodeBootSpreadsheetEditor(elem, fe);
 };
 
 function CodeBootSpreadsheetEditor(elem, fe) {
@@ -1233,11 +1453,13 @@ CodeBootSpreadsheetEditor.prototype.extractData = function (value) {
     }
 
     var widths = rows[0].map(function (x, i) {
-        var maxWidth = 0;
+        function stringWidth(str) {
+            return (str.length + 1) * 12 + 10;
+        }
+        var maxWidth = stringWidth(headers[i]);
         rows.forEach(function (row) {
             var cell = (i<row.length) ? row[i] : '';
-            var w = (cell.length + 1) * 12 + 10;
-            if (w > maxWidth) maxWidth = w;
+            maxWidth = Math.max(maxWidth, stringWidth(cell));
         });
         return maxWidth;
     });
@@ -1337,6 +1559,10 @@ CodeBootFileEditor.prototype.rename = function () {
             });
 
             fileTabInput.focus();
+
+            fileTabInput.setSelectionRange(oldFilename.lastIndexOf('/')+1,
+                                           oldFilename.length -
+                                           fe.file.extension(oldFilename).length);
         }
     }
 
@@ -1395,35 +1621,27 @@ CodeBootFileEditor.prototype.rename = function () {
 CodeBootFileEditor.prototype.setReadOnly = function (readOnly) {
 
     var fe = this;
-    var file = fe.file;
-    var fs = file.fs;
-    var vm = fs.vm;
-    var textEditor = fe.textEditor;
 
-    textEditor.markText(vm.beginningOfEditor(),
-                        vm.endOfEditor(),
-                        {
-                            readOnly: readOnly,
-                            inclusiveLeft: true,
-                            inclusiveRight: true
-                        });
-
-    textEditor.setOption('matchBrackets', !readOnly);
+    fe.textEditor.setReadOnly(readOnly);
 };
 
 CodeBootFileEditor.prototype.setEditorView = function (view) {
 
     var fe = this;
 
+    console.log('CodeBootFileEditor.prototype.setEditorView');
+
     fe.file.save(); // save in fe.file.content
+
+    var currentContent = fe.getValue();
 
     fe.fileTab.setAttribute('data-cb-editor-view', view);
     fe.fileContainer.setAttribute('data-cb-editor-view', view);
     fe.currentEditorView = view;
     fe.file.preferredEditorView = view;
 
-    if (fe.getValue !== fe.file.content) {
-        fe.setValue(fe.file.content); // restore from fe.file.content
+    if (fe.getValue() !== currentContent) {
+        fe.setValue(currentContent);
     }
 
     fe.refresh();

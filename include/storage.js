@@ -91,6 +91,7 @@ function cb_internal_attempt(operation) {
         operation();
         return false;
     } catch (e) {
+        console.log(e);
         return true;
     }
 }
