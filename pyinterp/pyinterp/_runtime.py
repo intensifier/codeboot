@@ -914,5 +914,5 @@ def is_host_dict(obj):
     raise NotImplementedError("not running in a browser")
 
 # Charts
-def runtime_chart(args):
+def runtime_chart(rte, args):
     raise NotImplementedError("not running in a browser")

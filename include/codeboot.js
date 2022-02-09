@@ -80,6 +80,12 @@ CodeBoot.prototype.preInit = function () {
 
 }
 
+CodeBoot.prototype.escapeHTML = function (str) {
+    return str.replace(/[&<>"'`]/g, function (chr) {
+        return '&#' + chr.charCodeAt(0) + ';';
+    });
+};
+
 CodeBoot.prototype.cb = new CodeBoot();
 
 CodeBoot.prototype.setupBeforeunloadHandling = function () {
@@ -100,7 +106,7 @@ CodeBoot.prototype.setupMouseMotionTracking = function (elem) {
     });
 };
 
-CodeBoot.prototype.setupMouseClickTracking = function (elem) {
+CodeBoot.prototype.setupMouseHandling = function (elem, windowObj) {
 
     var cb = this;
 
@@ -119,6 +125,18 @@ CodeBoot.prototype.setupMouseClickTracking = function (elem) {
     elem.addEventListener('contextmenu', function (event) {
         cb.preventContextMenu(event);
     });
+
+    elem.addEventListener('dblclick', function (event) {
+        windowObj.screenshot(event);
+    });
+
+    elem.addEventListener('dragstart', function (event) {
+        var dt = event.dataTransfer;
+        dt.effectAllowed = 'copyMove';
+        dt.setData('text/html', '<img src="' + windowObj.toDataURL() + '"/>');
+    });
+
+    elem.setAttribute('draggable', 'true');
 };
 
 CodeBoot.prototype.trackMouseMove = function (event) {
@@ -854,13 +872,19 @@ CodeBootVM.prototype.execCommands = function (cmds) {
     }
 };
 
-CodeBootVM.prototype.toURL = function (executable, cont) {
+CodeBootVM.prototype.getLocation = function () {
 
     var vm = this;
 
     var loc = window.location;
     var location = loc.protocol + '//' + loc.host + loc.pathname;
 
+    return location;
+};
+
+CodeBootVM.prototype.stateToURL = function (executable, cont) {
+
+    var vm = this;
     var cmds = [];
 
     if (vm.root.hasAttribute('data-cb-show-line-numbers')) {
@@ -880,9 +904,9 @@ CodeBootVM.prototype.toURL = function (executable, cont) {
     }
 
     vm.forEachElem('.cb-file-tab', function (elem) {
-        var label = elem.querySelector('.cb-tab-label');
-        if (label) {
-            var file = vm.fs.getByName(label.innerText);
+        var filename = elem.getAttribute('data-cb-file-tab-filename');
+        if (filename) {
+            var file = vm.fs.getByName(filename);
             if (file) {
                 cmds.push((file.fe.isActivated() ? 'F' : 'f') +
                           toSafeBase64(file.filename) + ',' +
@@ -902,11 +926,14 @@ CodeBootVM.prototype.toURL = function (executable, cont) {
         cmds.push('a');
     }
 
-    var cmds_str = ',' + cmds.join(',');
+    return vm.commandsToURL(cmds, cont);
+};
 
-    function fail() {
-        alert('Error while signing commands');
-    }
+CodeBootVM.prototype.commandsToURL = function (cmds, cont) {
+
+    var vm = this;
+    var location = vm.getLocation();
+    var cmds_str = ',' + cmds.join(',');
 
     if (vm.cb.privkey) {
         vm.cb.signWithKey(
@@ -914,7 +941,10 @@ CodeBootVM.prototype.toURL = function (executable, cont) {
             vm.cb.privkey,
             function (signature) {
                 if (signature) {
-                    var url = location + '?init=' + toSafeBase64FromUint8Array(signature) + cmds_str;
+                    var url = location +
+                              '?init=' +
+                              toSafeBase64FromUint8Array(signature) +
+                              cmds_str;
                     cont(url);
                 } else {
                     cont(null);
@@ -1058,23 +1088,13 @@ CodeBootVM.prototype.UI = function (vm) {
     var dw_parent = vm.root.querySelector('.cb-drawing-window');
 
     if (dw_parent) {
-
-        vm.cb.setupMouseClickTracking(dw_parent);
-
-        dw_parent.addEventListener('dblclick', function (event) {
-            ui.dw.screenshot(event);
-        });
+        vm.cb.setupMouseHandling(dw_parent, vm.ui.dw);
     }
 
     var pw_parent = vm.root.querySelector('.cb-pixels-window');
 
     if (pw_parent) {
-
-        vm.cb.setupMouseClickTracking(pw_parent);
-
-        pw_parent.addEventListener('dblclick', function (event) {
-            ui.pw.screenshot(event);
-        });
+        vm.cb.setupMouseHandling(pw_parent, vm.ui.pw);
     }
 };
 
@@ -1112,10 +1132,12 @@ CodeBootVM.prototype.updatePlayground = function () {
 
         case 'drawing':
             vm.ui.dw.setShow(true);
+            $('.cb-chart-window').css('display', 'none');
             break;
 
         case 'pixels':
             vm.ui.pw.setShow(true);
+            $('.cb-chart-window').css('display', 'none');
             break;
 
         case 'chart':
@@ -1344,7 +1366,7 @@ CodeBootVM.prototype.menuSettingsHTML = function () {
     <div class="dropdown-divider"></div>\
 \
     <h5 class="dropdown-header">' + vm.polyglotHTML('Language') + '</h5>\
-' + vm.langsUI.map(function (x) { return '    <a href="#" class="dropdown-item" data-cb-setting-ui-lang="' + x[0] + '">' + vm.SVG['checkmark'] + '&nbsp;&nbsp;' + vm.escapeHTML(x[1]) + '</a>\n'; }).join('') + '\
+' + vm.langsUI.map(function (x) { return '    <a href="#" class="dropdown-item" data-cb-setting-ui-lang="' + x[0] + '">' + vm.SVG['checkmark'] + '&nbsp;&nbsp;' + CodeBoot.prototype.escapeHTML(x[1]) + '</a>\n'; }).join('') + '\
 \
   </div>\
 </span>\
@@ -2886,30 +2908,30 @@ CodeBootVM.prototype.execControlsHTML = function (execBtns, closeBtn, cloneBtn) 
 \
   <div class="btn-group cb-exec-controls-buttons" role="group" data-toggle="tooltip" data-delay="2000" data-trigger="manual" data-placement="left" title="">\
 ' + (execBtns ? '\
-    <button class="btn btn-secondary cb-button cb-exec-btn-step" type="button" data-toggle="tooltip" data-delay="750" data-placement="bottom" data-html="true" title="' + vm.escapeHTML(vm.polyglotHTML('Single step/Pause')) + '">' +
+    <button class="btn btn-secondary cb-button cb-exec-btn-step" type="button" data-toggle="tooltip" data-delay="750" data-placement="bottom" data-html="true" title="' + CodeBoot.prototype.escapeHTML(vm.polyglotHTML('Single step/Pause')) + '">' +
 vm.SVG['play-1'] +
 vm.SVG['pause'] +
 vm.SVG['play-pause'] + '\
     </button>\
 \
-    <button class="btn btn-secondary cb-button cb-exec-btn-animate" type="button" data-toggle="tooltip" data-delay="750" data-placement="bottom" data-html="true" title="' + vm.escapeHTML(vm.polyglotHTML('Execute with animation')) + '">' +
+    <button class="btn btn-secondary cb-button cb-exec-btn-animate" type="button" data-toggle="tooltip" data-delay="750" data-placement="bottom" data-html="true" title="' + CodeBoot.prototype.escapeHTML(vm.polyglotHTML('Execute with animation')) + '">' +
 vm.SVG['play'] + '\
     </button>\
 \
-    <button class="btn btn-secondary cb-button cb-exec-btn-eval" type="button" data-toggle="tooltip" data-delay="750" data-placement="bottom" data-html="true" title="' + vm.escapeHTML(vm.polyglotHTML('Execute to end')) + '">' +
+    <button class="btn btn-secondary cb-button cb-exec-btn-eval" type="button" data-toggle="tooltip" data-delay="750" data-placement="bottom" data-html="true" title="' + CodeBoot.prototype.escapeHTML(vm.polyglotHTML('Execute to end')) + '">' +
 vm.SVG['play-inf'] + '\
     </button>\
 \
-    <button class="btn btn-secondary cb-button cb-exec-btn-stop" type="button" data-toggle="tooltip" data-delay="750" data-placement="bottom" data-html="true" title="' + vm.escapeHTML(vm.polyglotHTML('Stop')) + '">' +
+    <button class="btn btn-secondary cb-button cb-exec-btn-stop" type="button" data-toggle="tooltip" data-delay="750" data-placement="bottom" data-html="true" title="' + CodeBoot.prototype.escapeHTML(vm.polyglotHTML('Stop')) + '">' +
 vm.SVG['stop'] + '\
     </button>\
 ' + (closeBtn ? '\
-    <button class="btn btn-secondary cb-button cb-exec-btn-close" type="button" data-toggle="tooltip" data-delay="750" data-placement="bottom" data-html="true" title="' + vm.escapeHTML(vm.polyglotHTML('Close')) + '">' +
+    <button class="btn btn-secondary cb-button cb-exec-btn-close" type="button" data-toggle="tooltip" data-delay="750" data-placement="bottom" data-html="true" title="' + CodeBoot.prototype.escapeHTML(vm.polyglotHTML('Close')) + '">' +
 vm.SVG['close'] + '\
     </button>\
 ' : '') : '') + '\
 ' + (cloneBtn ? '\
-    <button class="btn btn-secondary cb-button cb-exec-btn-clone" type="button" data-toggle="tooltip" data-delay="750" data-placement="bottom" data-html="true" title="' + vm.escapeHTML(vm.polyglotHTML('Clone')) + '">' +
+    <button class="btn btn-secondary cb-button cb-exec-btn-clone" type="button" data-toggle="tooltip" data-delay="750" data-placement="bottom" data-html="true" title="' + CodeBoot.prototype.escapeHTML(vm.polyglotHTML('Clone')) + '">' +
 vm.SVG['window'] + '\
     </button>\
 ' : '') + '\
@@ -2951,8 +2973,8 @@ CodeBootVM.prototype.consoleHTML = function () {
   </div>\
   <div class="cb-pane-splitter"></div>\
   <div class="cb-playground cb-pane-rigid">\
-    <div class="cb-drawing-window" draggablezz="true"></div>\
-    <div class="cb-pixels-window" draggablezz="true"></div>\
+    <div class="cb-drawing-window""></div>\
+    <div class="cb-pixels-window""></div>\
     <div class="cb-chart-window"></div>\
     <div class="cb-html-window"></div>\
   </div>\
@@ -3242,10 +3264,10 @@ CodeBootVM.prototype.initCommon = function (opts) {
                 event.preventDefault();
 
                 if (ctxmenu.style.display === 'none') {
-                    vm.toURL(
+                    vm.stateToURL(
                         false,
                         function (state_url) {
-                            vm.toURL(
+                            vm.stateToURL(
                                 true,
                                 function (executable_url) {
                                     bundle_state_url = state_url;
@@ -3335,12 +3357,6 @@ CodeBootVM.prototype.setupSplitter = function (containerElem, setSize) {
     splitterElem.addEventListener('mousedown', mouseDown);
 };
 
-function escape_HTML(text) {
-  return text.replace(/[&<>"'`]/g, function (chr) {
-    return '&#' + chr.charCodeAt(0) + ';';
-  });
-};
-
 // UI events
 
 CodeBootVM.prototype.unload = function () {
@@ -3356,29 +3372,40 @@ CodeBootVM.prototype.menuFileDrop = function (event) {
 };
 
 CodeBootVM.prototype.dropFiles = function (files, i) {
+
     var vm = this;
+
     if (i === void 0) {
         i = 0;
     }
+
     if (i < files.length) {
-
-        var file = files[i];
-        var filename = 'scratch';
-        if ('name' in file) {
-            filename = file.name;
-        } else if ('fileName' in file) {
-            filename = file.fileName;
-        }
-
-        var reader = new FileReader();
-
-        reader.addEventListener('loadend', function () {
-            vm.dropFile(filename, decodeUtf8(reader.result));
+        vm.readDroppedFile(files[i], function (filename, content) {
+            if (filename === null) filename = 'scratch';
+            vm.dropFile(filename, content);
             vm.dropFiles(files, i+1);
         });
-
-        reader.readAsArrayBuffer(file);
     }
+};
+
+CodeBootVM.prototype.readDroppedFile = function (file, cont) {
+
+    var vm = this;
+
+    var filename = null;
+    if ('name' in file) {
+        filename = file.name;
+    } else if ('fileName' in file) {
+        filename = file.fileName;
+    }
+
+    var reader = new FileReader();
+
+    reader.addEventListener('loadend', function () {
+        cont(filename, decodeUtf8(reader.result));
+    });
+
+    reader.readAsArrayBuffer(file);
 };
 
 CodeBootVM.prototype.dropFile = function (filename, content) {
@@ -3443,6 +3470,186 @@ function decodeUtf8(arrayBuffer) {
   }
   return result;
 }
+
+
+CodeBootVM.prototype.confirmHTML = function (html, cont) {
+
+    var vm = this;
+
+    var dialog = vm.root.querySelector('.cb-modal-dialog');
+    var body = dialog && dialog.querySelector('.modal-body');
+    var footer = dialog && dialog.querySelector('.modal-footer');
+
+    if (!body || !footer) {
+        // use the builtin confirm dialog, which is unfortunately synchronous
+        // and doesn't handle HTML
+        cont(window.confirm(html));
+    } else {
+
+        body.innerHTML = html;
+
+        var has_confirmed_ok = false;
+
+        function confirm_ok() {
+            has_confirmed_ok = true;
+            $(dialog).modal('hide');
+        }
+
+        var cancel = document.createElement('button');
+        cancel.className = 'btn btn-secondary';
+        cancel.setAttribute('data-dismiss', 'modal');
+        cancel.innerHTML = vm.polyglotHTML('Cancel');
+
+        var ok = document.createElement('button');
+        ok.className = 'btn btn-primary';
+        ok.innerHTML = vm.polyglotHTML('OK');
+
+        ok.addEventListener('click', confirm_ok);
+
+        footer.innerHTML = '';
+        footer.appendChild(cancel);
+        footer.appendChild(ok);
+
+        $(dialog).on('hidden.bs.modal', function (event) {
+            $(dialog).modal('dispose');
+            body.innerHTML = '';
+            footer.innerHTML = '';
+            cont(has_confirmed_ok);
+        });
+
+        $(dialog).modal({}); // show the modal dialog
+    }
+};
+
+CodeBootVM.prototype.promptHTML = function (html, cont) {
+
+    var vm = this;
+
+    var dialog = vm.root.querySelector('.cb-modal-dialog');
+    var body = dialog && dialog.querySelector('.modal-body');
+    var footer = dialog && dialog.querySelector('.modal-footer');
+
+    if (!cont) cont = function () { };
+
+    if (!body || !footer) {
+        // use the builtin prompt, which is unfortunately synchronous
+        // and doesn't handle HTML
+        cont (window.prompt(html));
+    } else {
+
+        body.innerHTML = html + '<br><br>';
+
+        var has_confirmed_ok = false;
+
+        function confirm_ok() {
+            has_confirmed_ok = true;
+            $(dialog).modal('hide');
+        }
+
+        var input = document.createElement('input');
+        input.className = 'cb-prompt-input';
+        body.appendChild(input);
+
+        var cancel = document.createElement('button');
+        cancel.className = 'btn btn-secondary';
+        cancel.setAttribute('data-dismiss', 'modal');
+        cancel.innerHTML = vm.polyglotHTML('Cancel');
+
+        var ok = document.createElement('button');
+        ok.className = 'btn btn-primary';
+        ok.innerHTML = vm.polyglotHTML('OK');
+
+        ok.addEventListener('click', confirm_ok);
+
+        footer.innerHTML = '';
+        footer.appendChild(cancel);
+        footer.appendChild(ok);
+
+        var lastFocusedEditor = vm.lastFocusedEditor;
+        vm.lastFocusedEditor = null; // allow focus to leave editor
+
+        input.addEventListener('drop', function (event) {
+            event.preventDefault();
+            event.stopPropagation();
+            var dt = event.dataTransfer;
+            if ('files' in dt && dt.files.length === 1) {
+                var file = dt.files[0];
+                vm.readDroppedFile(dt.files[0], function (filename, content) {
+                    input.value = content;
+                    confirm_ok();
+                });
+            }
+        });
+
+        $(dialog).on('shown.bs.modal', function (event) {
+            input.focus();
+        });
+
+        $(dialog).on('hidden.bs.modal', function (event) {
+            $(dialog).modal('dispose');
+            body.innerHTML = '';
+            footer.innerHTML = '';
+            vm.lastFocusedEditor = lastFocusedEditor;
+            vm.focusLastFocusedEditor();
+            if (has_confirmed_ok) {
+                cont(input.value);
+            } else {
+                cont(null);
+            }
+        });
+
+        $(input).on('keyup', function (event) {
+            if (event.key === 'Enter' || event.keyCode === 13) {
+                confirm_ok();
+            }
+        });
+
+        $(dialog).modal({}); // show the modal dialog
+    }
+};
+
+CodeBootVM.prototype.alertHTML = function (html, cont) {
+
+    var vm = this;
+
+    var dialog = vm.root.querySelector('.cb-modal-dialog');
+    var body = dialog && dialog.querySelector('.modal-body');
+    var footer = dialog && dialog.querySelector('.modal-footer');
+
+    if (!cont) cont = function () { };
+
+    if (!body || !footer) {
+        // use the builtin alert, which is unfortunately synchronous
+        // and doesn't handle HTML
+        window.alert(html);
+        cont();
+    } else {
+
+        body.innerHTML = html;
+
+        function done() {
+            $(dialog).modal('hide');
+        }
+
+        var ok = document.createElement('button');
+        ok.className = 'btn btn-primary';
+        ok.innerHTML = vm.polyglotHTML('OK');
+
+        ok.addEventListener('click', done);
+
+        footer.innerHTML = '';
+        footer.appendChild(ok);
+
+        $(dialog).on('hidden.bs.modal', function (event) {
+            $(dialog).modal('dispose');
+            body.innerHTML = '';
+            footer.innerHTML = '';
+            cont();
+        });
+
+        $(dialog).modal({}); // show the modal dialog
+    }
+};
 
 CodeBootVM.prototype.setupTooltip = function () {
 
@@ -3670,8 +3877,6 @@ CodeBootVM.prototype.setFloating = function (floating) {
         var left = 0
         var top = 0
 
-        console.log(left, top)
-
         if (elem.latest_width_height !== undefined) {
             width = elem.latest_width_height.width;
             height = elem.latest_width_height.height;
@@ -3864,17 +4069,18 @@ CodeBootVM.prototype.setDevMode = function (devMode) {
 
     if (change) {
 
-        if (devMode) {
-            var privkey = prompt('Private key?');
-            if (privkey !== null && privkey !== '')
-                vm.cb.privkey = privkey;
-        }
-
         vm.devMode = devMode;
 
         vm.setAttribute('data-cb-dev-mode', devMode);
 
         vm.stateChanged();
+
+        if (devMode) {
+            vm.promptHTML('Private key?', function (privkey) {
+                if (privkey !== null && privkey !== '')
+                    vm.cb.privkey = privkey;
+            });
+        }
     }
 };
 

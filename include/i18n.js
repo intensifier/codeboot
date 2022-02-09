@@ -246,7 +246,7 @@ CodeBootVM.prototype.polyglotHTML = function (str, args) {
     for (var i=0; i<vm.langsUI.length; i++) {
         var lang = vm.langsUI[i][0];
         HTML += '<span class="cb-' + lang + '">' +
-                vm.escapeHTML(vm.format(vm.translate(lang, str), args)) +
+                CodeBoot.prototype.escapeHTML(vm.format(vm.translate(lang, str), args)) +
                 '</span>';
     }
 
@@ -288,103 +288,4 @@ CodeBootVM.prototype.tformat = function (str) {
     var vm = this;
 
     return vm.format(vm.translate('fr', str), arguments);
-};
-
-CodeBootVM.prototype.escapeHTML = function (str) {
-
-    var vm = this;
-
-    return str.replace(/&/g, '&amp;')
-              .replace(/</g, '&lt;')
-              .replace(/>/g, '&gt;')
-              .replace(/"/g, '&quot;')
-              .replace(/'/g, '&#39;');
-};
-
-CodeBootVM.prototype.confirmHTML = function (html, cont) {
-
-    var vm = this;
-
-    var dialog = vm.root.querySelector('.cb-modal-dialog');
-    var body = dialog && dialog.querySelector('.modal-body');
-    var footer = dialog && dialog.querySelector('.modal-footer');
-
-    if (!body || !footer) {
-        // use the builtin confirm dialog, which is unfortunately synchronous
-        // and doesn't handle HTML
-        cont(window.confirm(html));
-    } else {
-
-        body.innerHTML = html;
-
-        var has_confirmed_ok = false;
-
-        function confirm_ok() {
-            has_confirmed_ok = true;
-            $(dialog).modal('hide');
-        }
-
-        var cancel = document.createElement('button');
-        cancel.className = 'btn btn-secondary';
-        cancel.setAttribute('data-dismiss', 'modal');
-        cancel.innerHTML = vm.polyglotHTML('Cancel');
-
-        var ok = document.createElement('button');
-        ok.className = 'btn btn-primary';
-        ok.innerHTML = vm.polyglotHTML('OK');
-
-        ok.addEventListener('click', confirm_ok);
-
-        footer.innerHTML = '';
-        footer.appendChild(cancel);
-        footer.appendChild(ok);
-
-        $(dialog).on('hidden.bs.modal', function (event) {
-            $(dialog).modal('dispose');
-            cont(has_confirmed_ok);
-        });
-
-        $(dialog).modal({}); // show the modal dialog
-    }
-};
-
-CodeBootVM.prototype.alertHTML = function (html, cont) {
-
-    var vm = this;
-
-    var dialog = vm.root.querySelector('.cb-modal-dialog');
-    var body = dialog && dialog.querySelector('.modal-body');
-    var footer = dialog && dialog.querySelector('.modal-footer');
-
-    if (!cont) cont = function () { };
-
-    if (!body || !footer) {
-        // use the builtin alert, which is unfortunately synchronous
-        // and doesn't handle HTML
-        window.alert(html);
-        cont();
-    } else {
-
-        body.innerHTML = html;
-
-        function done() {
-            $(dialog).modal('hide');
-        }
-
-        var ok = document.createElement('button');
-        ok.className = 'btn btn-primary';
-        ok.innerHTML = vm.polyglotHTML('OK');
-
-        ok.addEventListener('click', done);
-
-        footer.innerHTML = '';
-        footer.appendChild(ok);
-
-        $(dialog).on('hidden.bs.modal', function (event) {
-            $(dialog).modal('dispose');
-            cont();
-        });
-
-        $(dialog).modal({}); // show the modal dialog
-    }
 };

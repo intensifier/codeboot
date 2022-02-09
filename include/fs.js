@@ -163,6 +163,18 @@ CodeBootFile.prototype.setReadOnly = function (readOnly) {
     file.fe.setReadOnly(readOnly);
 };
 
+CodeBootFile.prototype.toURL = function (cont) {
+
+    var file = this;
+    var fs = file.fs;
+    var vm = fs.vm;
+
+    var cmds = ['F' + toSafeBase64(file.filename) + ',' +
+                toSafeBase64(file.getContent())];
+
+    return vm.commandsToURL(cmds, cont);
+};
+
 function CodeBootFileSystem(vm) {
 
     var fs = this;
@@ -214,12 +226,12 @@ CodeBootFileSystem.prototype.setupTabDragAndDrop = function (fileTab, fe) {
         var file = fe.file;
         var dt = event.dataTransfer;
         dt.effectAllowed = 'copyMove';
+        fileTab.classList.add('cb-dragging');
         var shareableData = file.getShareableData();
         for (var i=0; i<shareableData.length; i++) {
             dt.setData(shareableData[i][0], shareableData[i][1]);
         }
         dt.setData('text/codeboot-file-name', file.filename);
-        fileTab.classList.add('cb-dragging');
     }
 
     function handleDragEnd(event) {
@@ -261,12 +273,6 @@ CodeBootFileSystem.prototype.setupTabDragAndDrop = function (fileTab, fe) {
             var fem = fs.fem;
             fem.moveTabs(fem.indexOfFilename(sourceFilename), index);
         }
-        return false;
-    }
-
-    function ignore(event) {
-        event.preventDefault();
-//        event.stopPropagation();
         return false;
     }
 
@@ -579,7 +585,7 @@ CodeBootFileSystem.prototype.addFileToMenu = function (elem, file) {
 
     var item = fs.newMenuItem(elem,
                               'dropdown-item',
-                              vm.escapeHTML(filename));
+                              CodeBoot.prototype.escapeHTML(filename));
 
     item.setAttribute('data-cb-filename', filename);
 
@@ -707,29 +713,48 @@ CodeBootFile.prototype.copyToClipboard = function () {
     }
 };
 
-CodeBootFile.prototype.toHTMLText = function () {
+CodeBootFile.prototype.toHTMLText = function (fontSize, fontFamily) {
 
     var file = this;
     var fe = file.fe;
     var textEditor = fe.textEditor;
 
+    if (fontSize === void 0) {
+        fontSize = '18px';
+    }
+
+    if (fontFamily === void 0) {
+        fontFamily = '\'Hack\', \'Lucida Console\', Monaco, monospace'
+    }
+
     if (textEditor === null) {
         return null;
-/*
-        var content = file.getContent();
-        return '<pre>' + escape_HTML(content) + '</pre>';
-*/
     } else {
 
         var styles = ['text-transform', 'color', 'font-weight'];
-        var HTMLText = '<pre style="font-family: \'Hack\', \'Lucida Console\', Monaco, monospace; font-size: 18px;">';
+        var HTMLText;
+
+        if (fontSize !== '' || fontFamily !== '') {
+            HTMLText = '<pre style="';
+            if (fontSize !== '') {
+                HTMLText += 'font-size:' + fontSize + ';';
+            }
+            if (fontFamily !== '') {
+                HTMLText += 'font-family:' + fontFamily + ';';
+            }
+            HTMLText += '">';
+        } else {
+            HTMLText = '<pre>';
+        }
+
         var nbLines = textEditor.cm.lineCount();
 
         for (var i=0; i<nbLines; i++) {
+            HTMLText += '\n';
             var lineTokens = textEditor.cm.getLineTokens(i, true);
             for (var j=0; j<lineTokens.length; j++) {
                 var t = lineTokens[j];
-                var token = escape_HTML(t.string);
+                var token = CodeBoot.prototype.escapeHTML(t.string);
                 var tokenType = t.type;
                 if (tokenType) {
 
@@ -747,7 +772,6 @@ CodeBootFile.prototype.toHTMLText = function () {
                 }
                 HTMLText += token + '</span>';
             }
-            if (i<nbLines-1) HTMLText += '\n';
         }
         HTMLText += '</pre>';
 
@@ -755,24 +779,39 @@ CodeBootFile.prototype.toHTMLText = function () {
     }
 };
 
-CodeBootFile.prototype.getShareableData = function () {
+CodeBootFile.prototype.getShareableData = function (fontSize, fontFamily) {
 
     var file = this;
-
-    var file = this;
+    var fe = file.fe;
     var filename = file.filename;
     var content = file.getContent();
     var result = [];
     var ext = file.extension(filename);
 
+    var url = 'https://codeboot.org/cegep/demo';/*TODO: generate if in devMode */
+
+    if (fontSize === void 0) {
+        fontSize = '18px';
+    }
+
     if (ext === '.csv' || ext === '.tsv') {
         result.push(['text/csv', content]);
     } else {
-        var HTMLText = file.toHTMLText();
+        var HTMLText = file.toHTMLText(fontSize, fontFamily);
         if (HTMLText !== null) {
+            if (url !== '') {
+                var link = '<a href="' + url + '"';
+                if (fontSize !== '') {
+                    link += ' style="font-size:' + fontSize + ';"';
+                }
+                link += '>' + CodeBoot.prototype.escapeHTML(filename) + '</a>';
+                HTMLText = link + '<br><br>\n' + HTMLText;
+            }
             result.push(['text/html', HTMLText]);
         }
     }
+
+    if (url !== '') content = url + '\n' + filename + '\n\n' + content;
 
     result.push(['text/plain', content]);
 

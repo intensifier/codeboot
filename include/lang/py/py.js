@@ -327,7 +327,7 @@ LangPy.prototype.objectRepresentation = function (obj, format, limit) {
     var xform = function (str) {
         var text;
         if (format === 'HTML') {
-            text = escape_HTML(str);
+            text = CodeBoot.prototype.escapeHTML(str);
         } else {
             text = str;
         }

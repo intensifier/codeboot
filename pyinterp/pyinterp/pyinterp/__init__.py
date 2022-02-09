@@ -9732,7 +9732,7 @@ def om_host_eval_code(rte, cont):
 
 def om_runtime_chart_code(rte, cont):
     args = rte_lookup_locals(rte, 'args')
-    runtime_chart(args)
+    runtime_chart(rte, args)
     return unwind_return(rte, om_None)
 
 def fresh_rte(options):
