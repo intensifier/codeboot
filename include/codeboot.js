@@ -1,4 +1,8 @@
-// codeBoot state
+//-----------------------------------------------------------------------------
+
+// Global state.
+//
+// The CodeBoot class has a single instance, stored in CodeBoot.prototype.cb .
 
 function CodeBoot() {
 
@@ -6,9 +10,12 @@ function CodeBoot() {
 
     cb.version = '3.1.12';
 
+    cb.vms = {};
+    cb.vmsCreated = 0;
+    cb.vmCount = 0;
+
     cb.cmds = null;
     cb.cmds_valid = false;
-    cb.privkey = null;
 
     cb.mouse = { x: 0,
                  y: 0,
@@ -18,83 +25,176 @@ function CodeBoot() {
                  alt: false
                };
 
-    document.addEventListener('DOMContentLoaded', e => cb.loaded());
+    document.addEventListener('DOMContentLoaded', function (event) {
+        cb.DOMContentLoaded();
+    });
 }
 
-// Dispatch the preinit event depending on environnement and setup environnement
-CodeBoot.prototype.loaded = function () {
+CodeBoot.prototype.DOMContentLoaded = function () {
 
-    var cb = this
+    var cb = this;
+
+    // Delay codeBoot initialization until other components are initialized.
 
     if (typeof Reveal !== 'undefined'){
-        console.log("Reveal js detected... initilizing codeboot after its initialization")
 
-        // Only start initilizing codeboot once reveal.js is ready
-        Reveal.on('ready', e => cb.preInit())
+        console.log('Reveal js detected...');
 
-        // refresh codemirror each time we change page see
+        // Only start initializing codeBoot once reveal.js is ready
+
+        Reveal.on('ready', function (event) {
+            cb.init();
+        });
+
+        // refresh CodeMirror each time we change page see
         // https://github.com/codemirror/CodeMirror/issues/61
-        Reveal.on('slidechanged', e =>
-            e.currentSlide.querySelectorAll('.CodeMirror')
-             .forEach(x => x.CodeMirror.refresh()))
+
+        Reveal.on('slidechanged', function (event) {
+            event.currentSlide.querySelectorAll('.CodeMirror')
+                .forEach(function (elem) {
+                    elem.CodeMirror.refresh();
+                });
+        });
     }
-    else{
-        cb.preInit()
-    }
-
-}
-
-// Function that pre-initialize codeboot
-CodeBoot.prototype.preInit = function () {
-
-    var cb = this
-
-    cb.rewrite_event_handlers(null, document.body);
-
-    function done() {
+    else {
         cb.init();
     }
+};
 
-    var search = window.location.search;
+CodeBoot.prototype.init = function () {
 
-    if (search && search.slice(0, 6) === '?init=') {
+    var cb = this;
+
+    var scope = document.body;
+
+    cb.extractCommandsFromLocation();
+
+    cb.setupBeforeunloadHandling();
+
+    cb.setupMouseMotionTracking(scope);
+
+    cb.rewrite_event_handlers(null, scope);
+
+    cb.setupAllVM(scope);
+
+    $(function () {
+        $('[data-toggle="tooltip"]').tooltip();
+    })
+
+/*
+    window.onbeforeunload = function () {
+        if (cb.saveInProgress) {
+            cb.saveInProgress = false;
+            return undefined;
+        }
+        if (!cb.devMode) {
+            return 'Your codeBoot session will be lost.'
+        } else {
+            return undefined;
+        }
+    };
+
+    if (!CodeMirror.commands.save) {
+        CodeMirror.commands.save = function (cm) {
+            if (cm.save) cm.save(cm);
+        };
+    }
+*/
+//    cb.handle_query();
+}
+
+CodeBoot.prototype.commandsPrefix = '?init=';
+
+CodeBoot.prototype.extractCommands = function (uri) {
+
+    var cb = this;
+
+    var pos = uri.lastIndexOf(cb.commandsPrefix);
+
+    if (pos < 0) return [false]; // empty commands and not verified
+
+    var init_str = uri.slice(pos + cb.commandsPrefix.length);
+    var parts = init_str.split(',');
+    var cmds = parts.slice(1);
+
+    cmds.unshift(cb.verifyString(cb.cmds.join(','), parts[0]));
+
+    return cmds;
+};
+
+/*deprecated*/
+CodeBoot.prototype.extractCommandsFromLocation = function () {
+
+    var cb = this;
+
+    var location = window.location;
+    var search = location.search;
+
+    if (search.slice(0, 6) === '?init=') {
 
         var init_str = search.slice(6);
         var parts = init_str.split(',');
-        var cmds = parts.slice(1);
-        var cmds_str = cmds.join(',');
-        var signature = fromSafeBase64ToUint8Array(parts[0]);
-        var i = 0;
 
-        cb.cmds = cmds;
+        cb.cmds = parts.slice(1);
 
-        cb.verify(toUint8Array(cmds_str),
-            signature,
-            function (isValid) {
-                cb.cmds_valid = isValid;
-                done();
-            });
-    } else {
-        done();
+        if (!cb.isIsolatedLocation()) {
+            cb.cmds_valid = cb.verifyString(cb.cmds.join(','), parts[0]);
+        } else {
+            cb.cmds_valid = true;
+        }
     }
-
-}
-
-CodeBoot.prototype.escapeHTML = function (str) {
-    return str.replace(/[&<>"'`]/g, function (chr) {
-        return '&#' + chr.charCodeAt(0) + ';';
-    });
 };
 
-CodeBoot.prototype.cb = new CodeBoot();
+CodeBoot.prototype.isIsolatedLocation = function () {
+
+    var cb = this;
+
+    var location = window.location;
+    var protocol = location.protocol;
+    var host = location.host;
+
+    return protocol !== 'https:' ||
+           host.indexOf(cb.isolatedSubdomain) === 0;
+};
+
+CodeBoot.prototype.getCodeBootLocation = function (isolated) {
+
+    var cb = this;
+
+    var location = window.location;
+    var protocol = location.protocol;
+    var host = location.host;
+    var pathname = location.pathname;
+
+    var subdomain = '';
+
+    if (isolated && !cb.isIsolatedLocation()) {
+        subdomain = cb.isolatedSubdomain;
+    }
+
+    return 'https://' + subdomain + host + pathname;
+};
 
 CodeBoot.prototype.setupBeforeunloadHandling = function () {
 
     var cb = this;
 
     window.addEventListener('beforeunload', function (event) {
-        return cb.beforeunloadHandler(event);
+        cb.saveAllVM();
+        event.preventDefault();
+        event.returnValue = '';
+        return 'your session will be lost';
     });
+};
+
+CodeBoot.prototype.saveAllVM = function () {
+
+    var cb = this;
+
+    for (var id in cb.vms) {
+        var vm = cb.vms[id];
+        vm.saveSession();
+    }
 };
 
 CodeBoot.prototype.setupMouseMotionTracking = function (elem) {
@@ -176,243 +276,6 @@ CodeBoot.prototype.preventContextMenu = function (event) {
     event.preventDefault(); // don't show context menu
 };
 
-CodeBoot.prototype.keyAlgo = {
-    name: 'RSASSA-PKCS1-v1_5',
-    modulusLength: 768,
-    publicExponent: new Uint8Array([1,0,1]),
-    hash: {
-        name: 'SHA-1'
-    }
-};
-
-CodeBoot.prototype.pubkeys = [
-    'MHwwDQYJKoZIhvcNAQEBBQADawAwaAJhAK2DURk0UzQSBUG8He9PziYJGn-Rkv68jEORAhmskprssApZHSADNK4hdQndCOGtbAvQqjRpf2Qq0MM2UIRxruUKApxX9hfw1ShNbijY5NgUugA9ON4KpxzFEY8_fk6WDQIDAQAB',
-    'MHwwDQYJKoZIhvcNAQEBBQADawAwaAJhAMbz-ADO_hOhaSYQ9YsX9YNEorprFex30r42SB-ImT1TtsHl2uO9ciRDcFSAbj5ocZlrcL3v961L6TcUAzny7EdDGD8NoLe8q2IiCWfGzgroyVffnECdOJw8VaO3_1HWdQIDAQAB',
-    'MHwwDQYJKoZIhvcNAQEBBQADawAwaAJhALyZszW7qTwl39Cc3xOYNbA9G_-ignhoCWlKPupsLpXGpmKmZuffcEAM8GbmeGBoEWv2SDzITVBlEf2okVf3ipx_JHcEG-tCvxugkwyS_uk8CiFZn9SpKM6VHFXDuOfYHQIDAQAB'
-];
-
-CodeBoot.prototype.keyGen = function () {
-
-    var cb = this;
-
-    function succeed(privkey, pubkey) {
-        console.log('privkey: ' +
-                    toSafeBase64FromUint8Array(new Uint8Array(privkey)));
-        console.log('pubkey: ' +
-                    toSafeBase64FromUint8Array(new Uint8Array(pubkey)));
-    }
-
-    function fail(err) {
-        console.log(err);
-        console.log('failed to generate keys');
-    }
-
-    if (window.crypto && window.crypto.subtle) {
-
-        var crypto = window.crypto.subtle;
-
-        crypto.generateKey(
-            CodeBoot.prototype.keyAlgo,
-            true,
-            ['sign', 'verify']).then(
-                function (key) {
-                    console.log(key);
-                    crypto.exportKey(
-                        'pkcs8',
-                        key.privateKey).then(function (privkey) {
-                            console.log(privkey);
-                            crypto.exportKey(
-                                'spki',
-                                key.publicKey).then(function (pubkey) {
-                                    console.log(pubkey);
-                                    succeed(privkey, pubkey);
-                                }).catch(function (err) {
-                                    fail(err);
-                                })
-                        }).catch(function (err) {
-                            fail(err);
-                        })
-                }).catch(function (err) {
-                    fail(err);
-                })
-    } else {
-        fail(null);
-    }
-};
-
-CodeBoot.prototype.withKey = function (b64, priv, succeed, fail) {
-
-    var cb = this;
-
-    if (window.crypto && window.crypto.subtle) {
-
-        var crypto = window.crypto.subtle;
-
-        crypto.importKey(
-            priv ? 'pkcs8' : 'spki',
-            fromSafeBase64ToUint8Array(b64),
-            CodeBoot.prototype.keyAlgo,
-            false, // not extractable
-            [priv ? 'sign' : 'verify']).then(succeed).catch(fail);
-    } else {
-        fail(null);
-    }
-};
-
-CodeBoot.prototype.signWithKey = function (data, key, cont) {
-
-    var cb = this;
-
-    function fail(err) {
-        cont(null);
-    }
-
-    if (window.crypto && window.crypto.subtle) {
-
-        var crypto = window.crypto.subtle;
-
-        function succeed(privkey) {
-
-            crypto.sign(
-                CodeBoot.prototype.keyAlgo,
-                privkey,
-                toUint8Array(data)).then(function (signature) {
-                    cont(new Uint8Array(signature));
-                }).catch(fail);
-        }
-
-        cb.withKey(key, true, succeed, fail);
-    } else {
-        fail(null);
-    }
-};
-
-CodeBoot.prototype.verifyWithKey = function (data, key, signature, cont) {
-
-    var cb = this;
-
-    function fail(err) {
-        cont(false);
-    }
-
-    if (window.crypto && window.crypto.subtle) {
-
-        var crypto = window.crypto.subtle;
-
-        function succeed(pubkey) {
-
-            crypto.verify(
-                CodeBoot.prototype.keyAlgo,
-                pubkey,
-                signature,
-                toUint8Array(data)).then(function (isValid) {
-                    cont(isValid);
-                }).catch(fail);
-        }
-
-        cb.withKey(key, false, succeed, fail);
-    } else {
-        fail(null);
-    }
-};
-
-CodeBoot.prototype.verify = function (data, signature, cont) {
-
-    var cb = this;
-    var i = 0;
-
-    function try_next_key() {
-        if (i < CodeBoot.prototype.pubkeys.length) {
-            cb.verifyWithKey(
-                data,
-                CodeBoot.prototype.pubkeys[i],
-                signature,
-                function (isValid) {
-                    if (!isValid) {
-                        i++;
-                        try_next_key();
-                    } else {
-                        cont(true);
-                    }
-                });
-        } else {
-            cont(false);
-        }
-    }
-
-    try_next_key();
-};
-
-CodeBoot.prototype.ajax = function (url, data, timeout, success, fail) {
-
-    var cb = this;
-    var xhr = new XMLHttpRequest();
-
-    xhr.timeout = timeout;
-
-    xhr.onload    = function () { success(xhr.responseText); };
-    xhr.ontimeout = function () { fail('timeout'); };
-    xhr.onerror   = function () { fail('error'); };
-
-    if (data === null) {
-        console.log('GET ' + url);
-        xhr.open('GET', url, true);
-    } else {
-        console.log('POST ' + url);
-        xhr.open('POST', url, true);
-        xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
-    }
-
-    xhr.send(data);
-
-    return xhr;
-};
-
-CodeBoot.prototype.init = function () {
-
-    var cb = this;
-
-    cb.setupBeforeunloadHandling();
-    cb.setupMouseMotionTracking(document.body);
-
-    cb.setupAllVM(document);
-
-    $(function () {
-        $('[data-toggle="tooltip"]').tooltip();
-    })
-
-/*
-    window.onbeforeunload = function () {
-        if (cb.saveInProgress) {
-            cb.saveInProgress = false;
-            return undefined;
-        }
-        if (!cb.devMode) {
-            return 'Your codeBoot session will be lost.'
-        } else {
-            return undefined;
-        }
-    };
-
-    if (!CodeMirror.commands.save) {
-        CodeMirror.commands.save = function (cm) {
-            if (cm.save) cm.save(cm);
-        };
-    }
-*/
-//    cb.handle_query();
-}
-
-CodeBoot.prototype.saveAllVM = function () {
-
-    var cb = this;
-
-    for (var id in CodeBoot.prototype.vms) {
-        var vm = CodeBoot.prototype.vms[id];
-        vm.saveSession();
-    }
-};
-
 CodeBoot.prototype.collectScripts = function (elem, script_type, cont) {
 
     var cb = this;
@@ -454,6 +317,31 @@ CodeBoot.prototype.collectScripts = function (elem, script_type, cont) {
     loop();
 };
 
+CodeBoot.prototype.ajax = function (url, data, timeout, success, fail) {
+
+    var cb = this;
+    var xhr = new XMLHttpRequest();
+
+    xhr.timeout = timeout;
+
+    xhr.onload    = function () { success(xhr.responseText); };
+    xhr.ontimeout = function () { fail('timeout'); };
+    xhr.onerror   = function () { fail('error'); };
+
+    if (data === null) {
+        console.log('GET ' + url);
+        xhr.open('GET', url, true);
+    } else {
+        console.log('POST ' + url);
+        xhr.open('POST', url, true);
+        xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+    }
+
+    xhr.send(data);
+
+    return xhr;
+};
+
 CodeBoot.prototype.setupAllVM = function (elem) {
 
     var cb = this;
@@ -462,9 +350,9 @@ CodeBoot.prototype.setupAllVM = function (elem) {
         elem.querySelectorAll('.cb-vm').forEach(function (root) {
             if (!getCodeBootVM(root)) {
                 var opts = { root: root };
-                var cmds = CodeBoot.prototype.cb.cmds;
+                var cmds = cb.cmds;
                 if (cmds) {
-                    CodeBoot.prototype.cb.cmds = null;
+                    cb.cmds = null;
                     opts.cmds = cmds;
                 }
                 new CodeBootVM(opts);
@@ -510,10 +398,6 @@ CodeBoot.prototype.setupAllVM = function (elem) {
     loop();
 };
 
-CodeBoot.prototype.vms = {};
-CodeBoot.prototype.vmsCreated = 0;
-CodeBoot.prototype.vmCount = 0;
-
 CodeBoot.prototype.zIndexFromLevel = function (level) {
     return 1000 * level;
 };
@@ -522,25 +406,25 @@ CodeBoot.prototype.registerVM = function (vm) {
 
     var cb = this;
 
-    vm.zIndex = cb.zIndexFromLevel(CodeBoot.prototype.vmCount);
+    vm.zIndex = cb.zIndexFromLevel(cb.vmCount);
 
     if (vm.zIndex !== 0) {
         vm.root.style.zIndex = vm.zIndex;
     }
 
-    CodeBoot.prototype.vms[vm.id] = vm;
-    CodeBoot.prototype.vmCount++;
+    cb.vms[vm.id] = vm;
+    cb.vmCount++;
 };
 
 CodeBoot.prototype.bringToFront = function (vm) {
 
     var cb = this;
 
-    var vms = Object.values(CodeBoot.prototype.vms);
+    var vms = Object.values(cb.vms);
 
-    //console.log('==> ' + vm.zIndex + ' ' + vm.root.style.zIndex + ' ' + cb.zIndexFromLevel(CodeBoot.prototype.vmCount-1));
+    //console.log('==> ' + vm.zIndex + ' ' + vm.root.style.zIndex + ' ' + cb.zIndexFromLevel(cb.vmCount-1));
 
-    if (vm.zIndex === cb.zIndexFromLevel(CodeBoot.prototype.vmCount-1))
+    if (vm.zIndex === cb.zIndexFromLevel(cb.vmCount-1))
         return false;
 
     vm.zIndex = Infinity;
@@ -554,7 +438,7 @@ CodeBoot.prototype.refreshZIndex = function () {
 
     var cb = this;
 
-    var vms = Object.values(CodeBoot.prototype.vms);
+    var vms = Object.values(cb.vms);
 
     vms.sort(function (a, b) {
         return (a.zIndex < b.zIndex) ? -1 : 1;
@@ -571,6 +455,7 @@ CodeBoot.prototype.refreshZIndex = function () {
 function getCodeBootVM(elem) {
 
     var vm = undefined;
+    var cb = CodeBoot.prototype.cb;
 
     if (elem !== undefined) {
         var root = elem.closest('.cb-vm'); // find enclosing cb-vm element
@@ -578,22 +463,22 @@ function getCodeBootVM(elem) {
             root = elem.querySelector('.cb-vm'); // find enclosed cb-vm element
         }
         if (root) {
-            vm = CodeBoot.prototype.vms['#' + root.getAttribute('id')];
+            vm = cb.vms['#' + root.getAttribute('id')];
         }
     }
 
     return vm;
 };
 
-CodeBoot.prototype.beforeunloadHandler = function (event) {
-
-    var cb = this;
-
-    cb.saveAllVM();
-    event.preventDefault();
-    event.returnValue = '';
-    return 'your session will be lost';
+CodeBoot.prototype.escapeHTML = function (str) {
+    return str.replace(/[&<>"'`]/g, function (chr) {
+        return '&#' + chr.charCodeAt(0) + ';';
+    });
 };
+
+CodeBoot.prototype.cb = new CodeBoot();
+
+//-----------------------------------------------------------------------------
 
 // CodeBoot virtual machines encapsulate an execution environment
 
@@ -692,6 +577,7 @@ function CodeBootVM(opts) {
     vm.vmClone = null;
     vm.isOpen = true;
     vm.embedded = false; // assume the vm is not embedded. Will be if pre tag is used
+    vm.privkey = null;
 
     vm.storageId = get_option_attr('storageId', 'data-cb-storage-id', id);
     vm.minWidth  = get_option_attr('minWidth', 'data-cb-min-width', 575);
@@ -736,6 +622,10 @@ function CodeBootVM(opts) {
     vm.lastResultRepresentation = null;
 
     vm.setClass('cb-vm', true); // force class in case not yet set
+
+    if (cb.isIsolatedLocation()) {
+        vm.setAttribute('data-cb-isolated', true);
+    }
 
     // get language (default to first registered language and level)
     var id_and_level = get_option('lang', 'data-cb-lang', '');
@@ -926,10 +816,11 @@ CodeBootVM.prototype.stateToURL = function (executable, cont) {
         cmds.push('a');
     }
 
-    return vm.commandsToURL(cmds, cont);
+    cont(vm.commandsToURL(cmds, false));
 };
 
-CodeBootVM.prototype.commandsToURL = function (cmds, cont) {
+/*deprecated*/
+CodeBootVM.prototype.commandsToURLOLD = function (cmds, cont) {
 
     var vm = this;
     var location = vm.getLocation();
@@ -942,7 +833,7 @@ CodeBootVM.prototype.commandsToURL = function (cmds, cont) {
             function (signature) {
                 if (signature) {
                     var url = location +
-                              '?init=' +
+                              vm.cb.commandsPrefix +
                               toSafeBase64FromUint8Array(signature) +
                               cmds_str;
                     cont(url);
@@ -953,6 +844,35 @@ CodeBootVM.prototype.commandsToURL = function (cmds, cont) {
     } else {
         cont(null);
     }
+};
+
+CodeBootVM.prototype.commandsToURL = function (cmds, isolated) {
+
+    var vm = this;
+    var location = vm.getLocation();
+    var cmds_str = ',' + cmds.join(',');
+    var signature = '';
+
+    console.log(vm.privkey);
+
+    if (vm.devMode && vm.privkey !== null) {
+        var sig = CodeBoot.prototype.signString(cmds_str, vm.privkey);
+        if (sig === null) {
+            isolated = true;
+        } else {
+            signature = sig;
+        }
+    } else {
+        isolated = true;
+    }
+
+    if (isolated) {
+        location = 'https://app.codeboot.org/cegep/demo/';/*TODO: generate if in devMode */
+    } else {
+        location = 'https://codeboot.org/cegep/demo/';/*TODO: generate if in devMode */
+    }
+
+    return location + vm.cb.commandsPrefix + signature + cmds_str;
 };
 
 CodeBootVM.prototype.beginSession = function () {
@@ -1018,6 +938,7 @@ CodeBootVM.prototype.close = function () {
 CodeBootVM.prototype.remove = function () {
 
     var vm = this;
+    var cb = vm.cb;
 
     vm.fs.removeAllFileEditors();
 
@@ -1027,9 +948,9 @@ CodeBootVM.prototype.remove = function () {
 
     vm.isOpen = false;
 
-    delete CodeBoot.prototype.vms[vm.id];
+    delete cb.vms[vm.id];
 
-    CodeBoot.prototype.vmCount--;
+    cb.vmCount--;
 };
 
 CodeBootVM.prototype.initUI = function () {
@@ -1340,7 +1261,7 @@ CodeBootVM.prototype.menuSettingsHTML = function () {
     return '\
 <span class="cb-menu-settings dropdown">\
 \
-  <button class="btn btn-secondary cb-button cb-menu-settings-btn" type="button" data-toggle="dropdown">' + vm.SVG['gears'] + '</button>\
+  <button class="btn btn-secondary cb-button cb-menu-settings-btn" type="button" data-toggle="dropdown">' + vm.SVG['gear'] + vm.SVG['gears'] + '</button>\
   <div class="dropdown-menu">\
 \
     <h5 class="dropdown-header">' + vm.polyglotHTML('Animation speed') + '</h5>\
@@ -2838,6 +2759,9 @@ CodeBootVM.prototype.SVG =
         'clipboard':
         '<svg class="cb-svg-clipboard" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024"><path fill="#000000" d="M322 321l384 0c-3.376-40-19.458-70.9-55.842-80.712-0.892-0.238-2.24-0.848-3.134-1.082-24.008-6.848-42.024-15.306-42.024-41.562L605 156.454C605 105.382 563.952 64 512.98 64c-50.932 0-91.98 41.382-91.98 92.454l0 41.19c0 26.256-17.184 34.338-41.194 41.186-0.894 0.234-1.6 1.22-2.532 1.458C340.892 250.1 325.854 281 322 321zM513.98 128.79c15.23 0 27.582 12.39 27.582 27.664 0 15.308-12.352 27.7-27.582 27.7-15.228 0-27.544-12.39-27.544-27.7C486.436 141.18 498.752 128.79 513.98 128.79zM811.222 127 663 127l0 27.976c0 21.166 18.386 38.024 39.014 38.024l74.424 0c13.334 0 24.198 10.87 24.88 24.39l0.17 654.2c-0.644 12.864-10.606 23.092-23.028 24.034l-528.836 0.062c-12.422-0.942-22.298-11.39-22.944-24.252l-0.17-654.028c0.644-13.522 11.716-24.406 25.012-24.406l74.462 0c20.626 0 37.014-16.858 37.014-38.024L362.998 127l-146.262 0C186.5 127 161 152.116 161 183.15l0 720.76c0 31.004 25.5 57.09 55.738 57.09L513.98 961l297.242 0c30.276 0 53.778-26.086 53.778-57.09L865 183.15C865 152.116 841.498 127 811.222 127zM289 385l224 0 0 64-224 0 0-64ZM289 769l320 0 0 64-320 0 0-64ZM289 641l258 0 0 64-258 0 0-64ZM289 513l416 0 0 64-416 0 0-64Z"></path></svg>',
 
+        'gear':
+        '<svg class="cb-svg-gear" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><g><path style="fill:#000000" d="m24.04 0.14285c-1.376 0-2.7263 0.12375-4.0386 0.34741l-0.64 6.7853c-1.3572 0.37831-2.6417 0.90728-3.8432 1.585l-5.244-4.3317c-2.2152 1.5679-4.1541 3.4955-5.7217 5.7101l4.3426 5.2437c-0.67695 1.2001-1.2177 2.4878-1.5959 3.8432l-6.7745 0.64053c-0.22379 1.3127-0.34741 2.6622-0.34741 4.0386 0 1.3788 0.12285 2.7238 0.34741 4.0386l6.7745 0.64056c0.37825 1.3554 0.91896 2.6431 1.5959 3.8432l-4.3317 5.2437c1.5648 2.2089 3.4908 4.1457 5.6997 5.7105l5.2545-4.3426c1.2023 0.67835 2.485 1.2174 3.8432 1.5959l0.64053 6.7853c1.3123 0.22368 2.6626 0.33658 4.0386 0.33658s2.7155-0.11289 4.0278-0.33658l0.64053-6.7853c1.3582-0.37847 2.6409-0.91755 3.8432-1.5959l5.2545 4.3426c2.2088-1.5649 4.1348-3.5017 5.6997-5.7105l-4.3317-5.2437c0.67695-1.2001 1.2177-2.4878 1.5959-3.8432l6.7744-0.64056c0.22456-1.3148 0.34741-2.6598 0.34741-4.0386 0-1.3765-0.12361-2.726-0.34741-4.0386l-6.7744-0.64053c-0.37825-1.3554-0.91896-2.6431-1.5959-3.8432l4.3426-5.2437c-1.568-2.2146-3.507-4.1422-5.722-5.7101l-5.2437 4.3317c-1.2015-0.67776-2.486-1.2067-3.8432-1.585l-0.641-6.7853c-1.3123-0.22366-2.6518-0.34741-4.0278-0.34741zm0 14.776c5.0178 0 9.076 4.0691 9.076 9.0869s-4.0582 9.0869-9.076 9.0869-9.0869-4.0691-9.0869-9.0869 4.0691-9.0869 9.0869-9.0869z"></path></g></svg>',
+
         'gears':
         '<svg class="cb-svg-gears" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><path fill="#000000" d="M5.683 11.282l0.645-0.903-0.707-0.707-0.903 0.645c-0.168-0.094-0.347-0.168-0.535-0.222l-0.183-1.095h-1l-0.183 1.095c-0.188 0.053-0.368 0.128-0.535 0.222l-0.903-0.645-0.707 0.707 0.645 0.903c-0.094 0.168-0.168 0.347-0.222 0.535l-1.095 0.183v1l1.095 0.183c0.053 0.188 0.128 0.368 0.222 0.535l-0.645 0.903 0.707 0.707 0.903-0.645c0.168 0.094 0.347 0.168 0.535 0.222l0.183 1.095h1l0.183-1.095c0.188-0.053 0.368-0.128 0.535-0.222l0.903 0.645 0.707-0.707-0.645-0.903c0.094-0.168 0.168-0.347 0.222-0.535l1.095-0.182v-1l-1.095-0.183c-0.053-0.188-0.128-0.368-0.222-0.535zM3.5 13.5c-0.552 0-1-0.448-1-1s0.448-1 1-1 1 0.448 1 1-0.448 1-1 1zM16 6v-1l-1.053-0.191c-0.019-0.126-0.044-0.25-0.074-0.372l0.899-0.58-0.383-0.924-1.046 0.226c-0.066-0.108-0.136-0.213-0.211-0.315l0.609-0.88-0.707-0.707-0.88 0.609c-0.102-0.074-0.207-0.145-0.315-0.211l0.226-1.046-0.924-0.383-0.58 0.899c-0.122-0.030-0.246-0.054-0.372-0.074l-0.191-1.053h-1l-0.191 1.053c-0.126 0.019-0.25 0.044-0.372 0.074l-0.58-0.899-0.924 0.383 0.226 1.046c-0.108 0.066-0.213 0.136-0.315 0.211l-0.88-0.609-0.707 0.707 0.609 0.88c-0.074 0.102-0.145 0.207-0.211 0.315l-1.046-0.226-0.383 0.924 0.899 0.58c-0.030 0.122-0.054 0.246-0.074 0.372l-1.053 0.191v1l1.053 0.191c0.019 0.126 0.044 0.25 0.074 0.372l-0.899 0.58 0.383 0.924 1.046-0.226c0.066 0.108 0.136 0.213 0.211 0.315l-0.609 0.88 0.707 0.707 0.88-0.609c0.102 0.074 0.207 0.145 0.315 0.211l-0.226 1.046 0.924 0.383 0.58-0.899c0.122 0.030 0.246 0.054 0.372 0.074l0.191 1.053h1l0.191-1.053c0.126-0.019 0.25-0.044 0.372-0.074l0.58 0.899 0.924-0.383-0.226-1.046c0.108-0.066 0.213-0.136 0.315-0.211l0.88 0.609 0.707-0.707-0.609-0.88c0.074-0.102 0.145-0.207 0.211-0.315l1.046 0.226 0.383-0.924-0.899-0.58c0.030-0.122 0.054-0.246 0.074-0.372l1.053-0.191zM10.5 7.675c-1.201 0-2.175-0.974-2.175-2.175s0.974-2.175 2.175-2.175 2.175 0.974 2.175 2.175c0 1.201-0.974 2.175-2.175 2.175z"></path></svg>',
 
@@ -3227,9 +3151,15 @@ CodeBootVM.prototype.initCommon = function (opts) {
             var vm = getCodeBootVM(event.target);
 
             function done() {
+                if (vm.devMode) {
+                    ctxmenu.setAttribute('data-cb-dev-mode', true);
+                } else {
+                    ctxmenu.removeAttribute('data-cb-dev-mode');
+                }
                 ctxmenu.querySelectorAll('.cb-svg-checkmark').forEach(function (elem) {
                     elem.style.visibility = 'hidden';
                 });
+                var elem = null;
                 if (vm.root.hasAttribute('data-cb-hidden')) {
                     elem = ctxmenu.querySelector('[data-cb-context-presentation="hidden"] .cb-svg-checkmark');
                 } else if (vm.root.hasAttribute('data-cb-floating')) {
@@ -3264,12 +3194,15 @@ CodeBootVM.prototype.initCommon = function (opts) {
                 event.preventDefault();
 
                 if (ctxmenu.style.display === 'none') {
+                    console.log('111111111111111');
                     vm.stateToURL(
                         false,
                         function (state_url) {
+                            console.log('22222222222222 '+state_url);
                             vm.stateToURL(
                                 true,
                                 function (executable_url) {
+                                    console.log('3333333333333 '+executable_url);
                                     bundle_state_url = state_url;
                                     bundle_executable_url = executable_url;
                                     done();
@@ -3364,10 +3297,23 @@ CodeBootVM.prototype.unload = function () {
     vm.saveSession();
 };
 
-CodeBootVM.prototype.menuFileDrop = function (event) {
+CodeBootVM.prototype.handleDrop = function (event) {
+
     var vm = this;
-    if ('files' in event.dataTransfer) {
-        vm.dropFiles(event.dataTransfer.files);
+    var dt = event.dataTransfer;
+
+    if ('files' in dt && dt.files.length > 0) {
+        vm.dropFiles(dt.files);
+    } else {
+        var URIListString = dt.getData('text/uri-list');
+        if (URIListString !== '') {
+            var URIList = URIListString.split('\r\n');
+            if (URIList.length === 1) {
+                URIList = URIListString.split('\n');
+            }
+            if (URIList[URIList.length-1] === '') URIList.pop();
+            vm.dropURIList(URIList);
+        }
     }
 };
 
@@ -3375,7 +3321,7 @@ CodeBootVM.prototype.dropFiles = function (files, i) {
 
     var vm = this;
 
-    if (i === void 0) {
+    if (i === undefined) {
         i = 0;
     }
 
@@ -3471,6 +3417,26 @@ function decodeUtf8(arrayBuffer) {
   return result;
 }
 
+CodeBootVM.prototype.dropURIList = function (URIList) {
+
+    var vm = this;
+    var cb = vm.cb;
+
+    var all_verified = true;
+    var cmds_array = [];
+
+    for (var i=0; i<URIList.length; i++) {
+        var cmds = cb.extractCommands(URIList[i]);
+        all_verified = all_verified && cmds[0];
+        cmds_array.push(cmds.slice(1));
+    }
+
+    console.log('---------- CodeBootVM.prototype.dropURIList');
+    console.log(all_verified);
+    console.log(cmds_array);
+};
+
+//-----------------------------------------------------------------------------
 
 CodeBootVM.prototype.confirmHTML = function (html, cont) {
 
@@ -3651,6 +3617,8 @@ CodeBootVM.prototype.alertHTML = function (html, cont) {
     }
 };
 
+//-----------------------------------------------------------------------------
+
 CodeBootVM.prototype.setupTooltip = function () {
 
     var vm = this;
@@ -3676,8 +3644,8 @@ CodeBootVM.prototype.setupEventHandlers = function () {
     var vm = this;
 
     if (vm.editable) {
-        vm.setupDrop(vm.root, function (event) {
-            vm.menuFileDrop(event);
+        vm.setupDropHandler(vm.root, function (event) {
+            vm.handleDrop(event);
         });
     } else {
         vm.root.addEventListener('mousedown', function (event) {
@@ -3829,6 +3797,38 @@ CodeBootVM.prototype.setupEventHandlers = function () {
     });
 */
     vm.setupMoveRezizeHandlers();
+};
+
+CodeBootVM.prototype.setupDropHandler = function (elem, handler) {
+
+    var vm = this;
+
+    function onDragEnter(event) {
+        onDragOver(event);
+    }
+
+    function onDragLeave(event) {
+    }
+
+    function onDragOver(event) {
+        if (handler !== undefined) {
+            event.dataTransfer.dropEffect = 'copy';
+        }
+        event.preventDefault();
+        event.stopPropagation();
+    }
+
+    function onDrop(event) {
+        event.preventDefault();
+        if (handler !== undefined) {
+            handler(event);
+        }
+    }
+
+    elem.addEventListener('dragenter', onDragEnter);
+    elem.addEventListener('dragleave', onDragLeave);
+    elem.addEventListener('dragover', onDragOver);
+    elem.addEventListener('drop', onDrop);
 };
 
 CodeBootVM.prototype.toggleHidden = function () {
@@ -4065,21 +4065,29 @@ CodeBootVM.prototype.stateAddedHistory = function (line) {
 CodeBootVM.prototype.setDevMode = function (devMode) {
 
     var vm = this;
-    var change = (devMode !== vm.devMode);
 
-    if (change) {
+    if (devMode !== vm.devMode) {
 
-        vm.devMode = devMode;
-
-        vm.setAttribute('data-cb-dev-mode', devMode);
-
-        vm.stateChanged();
+        function done() {
+            vm.devMode = devMode;
+            vm.setAttribute('data-cb-dev-mode', devMode);
+            vm.stateChanged();
+        }
 
         if (devMode) {
             vm.promptHTML('Private key?', function (privkey) {
-                if (privkey !== null && privkey !== '')
-                    vm.cb.privkey = privkey;
+                console.log('PRIVKEY='+privkey);
+                if (privkey !== null && privkey !== '') {
+                    var keys = [privkey];
+                    keys = CodeBoot.prototype.setupKeys(keys);
+                    if (keys.length === 1) {
+                        vm.privkey = keys[0];
+                    }
+                }
+                done();
             });
+        } else {
+            done();
         }
     }
 };

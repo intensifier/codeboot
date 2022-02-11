@@ -163,7 +163,7 @@ CodeBootFile.prototype.setReadOnly = function (readOnly) {
     file.fe.setReadOnly(readOnly);
 };
 
-CodeBootFile.prototype.toURL = function (cont) {
+CodeBootFile.prototype.toURL = function (isolated) {
 
     var file = this;
     var fs = file.fs;
@@ -172,7 +172,7 @@ CodeBootFile.prototype.toURL = function (cont) {
     var cmds = ['F' + toSafeBase64(file.filename) + ',' +
                 toSafeBase64(file.getContent())];
 
-    return vm.commandsToURL(cmds, cont);
+    return vm.commandsToURL(cmds, isolated);
 };
 
 function CodeBootFileSystem(vm) {
@@ -227,6 +227,7 @@ CodeBootFileSystem.prototype.setupTabDragAndDrop = function (fileTab, fe) {
         var dt = event.dataTransfer;
         dt.effectAllowed = 'copyMove';
         fileTab.classList.add('cb-dragging');
+        fileTab.setAttribute('data-cb-dragstart', '');
         var shareableData = file.getShareableData();
         for (var i=0; i<shareableData.length; i++) {
             dt.setData(shareableData[i][0], shareableData[i][1]);
@@ -251,6 +252,7 @@ CodeBootFileSystem.prototype.setupTabDragAndDrop = function (fileTab, fe) {
     }
 
     function handleDragOver(event) {
+        fileTab.removeAttribute('data-cb-dragstart');
         if (event.dataTransfer.getData('text/codeboot-file-name') !== '') {
             return false;
         }
@@ -264,7 +266,7 @@ CodeBootFileSystem.prototype.setupTabDragAndDrop = function (fileTab, fe) {
         if (sourceFilename === '') {
             var vm = fs.vm;
             if (vm.editable) {
-                vm.menuFileDrop(event);
+                vm.handleDrop(event);
             }
             event.preventDefault();
         } else {
@@ -788,7 +790,7 @@ CodeBootFile.prototype.getShareableData = function (fontSize, fontFamily) {
     var result = [];
     var ext = file.extension(filename);
 
-    var url = 'https://codeboot.org/cegep/demo';/*TODO: generate if in devMode */
+    var url = file.toURL(false);
 
     if (fontSize === void 0) {
         fontSize = '18px';
@@ -799,7 +801,7 @@ CodeBootFile.prototype.getShareableData = function (fontSize, fontFamily) {
     } else {
         var HTMLText = file.toHTMLText(fontSize, fontFamily);
         if (HTMLText !== null) {
-            if (url !== '') {
+            if (url !== null) {
                 var link = '<a href="' + url + '"';
                 if (fontSize !== '') {
                     link += ' style="font-size:' + fontSize + ';"';
@@ -811,9 +813,13 @@ CodeBootFile.prototype.getShareableData = function (fontSize, fontFamily) {
         }
     }
 
-    if (url !== '') content = url + '\n' + filename + '\n\n' + content;
+    content = (url !== null ? url + '\n' : '') + filename + '\n\n' + content;
 
     result.push(['text/plain', content]);
+
+    if (url !== null) {
+        result.push(['text/uri-list', url]);
+    }
 
     return result;
 };

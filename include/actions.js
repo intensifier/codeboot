@@ -1,35 +1,3 @@
-CodeBootVM.prototype.setupDrop = function (elem, handler) {
-
-    var vm = this;
-
-    var onDragEnter = function (e) {
-        onDragOver(e);
-    };
-
-    var onDragLeave = function (e) {
-    };
-
-    var onDragOver = function (e) {
-        if (handler !== void 0) {
-            e.dataTransfer.dropEffect = 'copy';
-        }
-        e.preventDefault();
-        e.stopPropagation();
-    };
-
-    var onDrop = function (e) {
-        e.preventDefault();
-        if (handler !== void 0) {
-            handler(e);
-        }
-    };
-
-    elem.addEventListener('dragenter', onDragEnter);
-    elem.addEventListener('dragleave', onDragLeave);
-    elem.addEventListener('dragover', onDragOver);
-    elem.addEventListener('drop', onDrop);
-};
-
 CodeBootVM.prototype.reportError = function (text) {
 
     var vm = this;

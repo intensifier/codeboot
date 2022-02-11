@@ -36,25 +36,37 @@
 /* General settings of the codeBoot UI */
 
 body {
-    --cb-navbar-color: #90c0ff;
-    --cb-focus-repl-navbar-controls-color: #7db6d5;
-    --cb-focus-repl-navbar-controls-hover-color: #afd3e6;
+    --cb-navbar-color: #7db6d5;
     --cb-repl-container-color: #e0f0f6;
+    --cb-focus-repl-navbar-controls-color: var(--cb-repl-container-color);
+    --cb-focus-repl-navbar-controls-hover-color: #afd3e6;
+
+    --cb-navbar-color-isolated: #ff7900;
+    --cb-repl-container-color-isolated: #ffe4cc;
+    --cb-focus-repl-navbar-controls-color-isolated: var(--cb-repl-container-color-isolated);
+    --cb-focus-repl-navbar-controls-hover-color-isolated: #ffbc80;
+
     --cb-file-container-color: #f6f6f6;
     --cb-file-tab-inactive-color: #fdfdfd;
     --cb-file-tab-drag-color: #d0d0d0;
+    --cb-file-tab-border-radius: 10px;
+
     --cb-exec-point-color: yellow;
     --cb-exec-point-bubble-color: var(--cb-exec-point-color);
+
+    --cb-error-color: #eb48ff;
+
     --cb-console-height: 260px;    /* initial console height */
     --cb-console-min-height: 55px; /* min console height = ~1 line */
+
     --cb-playground-height: 260px;
     --cb-playground-width: 370px;
     --cb-playground-min-width: 50px;
+
     --cb-margin: 8px;
     --cb-main-border-radius: 10px;
     --cb-container-border-radius: 6px;
     --cb-btn-toolbar-border-radius: 6px;
-    --cb-file-tab-border-radius: 10px;
 }
 
 /* Internationalization support */
@@ -205,8 +217,12 @@ pre.cb-vm {
 }
 
 .cb-navbar-controls {
-    background-color: var(--cb-focus-repl-navbar-controls-color);
-    border-radius: var(--cb-main-border-radius) var(--cb-main-border-radius) 0 0; /****************/
+    background-color: var(--cb-navbar-color);
+    border-radius: var(--cb-main-border-radius) var(--cb-main-border-radius) 0 0;
+}
+
+.cb-vm[data-cb-isolated] .cb-navbar-controls {
+    background-color: var(--cb-navbar-color-isolated);
 }
 
 .cb-repl-container {
@@ -215,6 +231,10 @@ pre.cb-vm {
     margin: var(--cb-margin) 0 0 var(--cb-margin);
     padding: 5px;
     background-color: var(--cb-repl-container-color);
+}
+
+.cb-vm[data-cb-isolated] .cb-repl-container {
+    background-color: var(--cb-repl-container-color-isolated);
 }
 
 .cb-vm:not([data-cb-show-playground]) .cb-repl-container {
@@ -241,22 +261,28 @@ pre.cb-vm {
     background-color: var(--cb-focus-repl-navbar-controls-hover-color);
 }
 
+.cb-vm[data-cb-isolated][data-cb-focus-repl] .cb-exec-controls-buttons .cb-button.btn-secondary:hover {
+    background-color: var(--cb-focus-repl-navbar-controls-hover-color-isolated);
+}
+
 .cb-vm[data-cb-focus-repl] .cb-exec-controls-buttons .cb-button.btn-secondary,
 .cb-vm[data-cb-focus-repl] .cb-exec-controls-buttons .cb-button.btn-secondary:focus,
 .cb-vm[data-cb-focus-repl] .cb-exec-controls-buttons .cb-button.btn-secondary:active {
-    background-color: #d0e6f1;
+    background-color: var(--cb-focus-repl-navbar-controls-color);
+}
+
+.cb-vm[data-cb-isolated][data-cb-focus-repl] .cb-exec-controls-buttons .cb-button.btn-secondary,
+.cb-vm[data-cb-isolated][data-cb-focus-repl] .cb-exec-controls-buttons .cb-button.btn-secondary:focus,
+.cb-vm[data-cb-isolated][data-cb-focus-repl] .cb-exec-controls-buttons .cb-button.btn-secondary:active {
+    background-color: var(--cb-focus-repl-navbar-controls-color-isolated);
 }
 
 .cb-vm[data-cb-focus-repl] .cb-exec-controls-buttons .cb-button.btn-secondary:hover {
     background-color: var(--cb-focus-repl-navbar-controls-hover-color);
 }
 
-.cb-navbar-controls {
-    background-color: #7db6d5;
-}
-
-.cb-repl-container {
-    background-color: var(--cb-repl-container-color);
+.cb-vm[data-cb-isolated][data-cb-focus-repl] .cb-exec-controls-buttons .cb-button.btn-secondary:hover {
+    background-color: var(--cb-focus-repl-navbar-controls-hover-color-isolated);
 }
 
 .cb-editors {
@@ -445,7 +471,7 @@ ul.cb-file-tabs {
 }
 
 .cb-resize-handle > svg {
-    width: 1.3em;
+    width: 1.5em;
 }
 
 .cb-exec-btn-step,
@@ -535,10 +561,6 @@ ul.cb-file-tabs {
     margin: 0;
 }
 
-.cb-vm[data-cb-dev-mode] .cb-menu-settings > .cb-button > svg {
-    filter: invert(16%) sepia(94%) saturate(7497%) hue-rotate(1deg) brightness(99%) contrast(112%);
-}
-
 .cb-menu-file button {
     transform: translate(0,-0.1em);
 }
@@ -592,6 +614,20 @@ ul.cb-file-tabs {
 
 .cb-menu-settings > .cb-button > svg {
     width: 1.2em;
+}
+
+/*
+.cb-vm[data-cb-dev-mode] .cb-menu-settings > .cb-button > svg {
+    filter: invert(16%) sepia(94%) saturate(7497%) hue-rotate(1deg) brightness(99%) contrast(112%);
+}
+*/
+
+.cb-vm[data-cb-dev-mode] .cb-menu-settings > .cb-button > svg.cb-svg-gear {
+    display: none;
+}
+
+.cb-vm:not([data-cb-dev-mode]) .cb-menu-settings > .cb-button > svg.cb-svg-gears {
+    display: none;
 }
 
 .cb-svg-trash,
@@ -710,6 +746,18 @@ ul.cb-file-tabs {
     border-right: 1px dashed var(--cb-file-tab-drag-color);
 }
 
+.cb-vm .cb-file-tab[data-cb-dragstart].cb-dragging.active > .cb-tab,
+.cb-vm .cb-file-tab[data-cb-dragstart].cb-dragging.active:hover > .cb-tab,
+.cb-vm .cb-file-tab[data-cb-dragstart].cb-dragging > .cb-tab {
+    background-color: var(--cb-focus-repl-navbar-controls-hover-color-isolated);
+}
+
+.cb-vm[data-cb-dev-mode] .cb-file-tab[data-cb-dragstart].cb-dragging.active > .cb-tab,
+.cb-vm[data-cb-dev-mode] .cb-file-tab[data-cb-dragstart].cb-dragging.active:hover > .cb-tab,
+.cb-vm[data-cb-dev-mode] .cb-file-tab[data-cb-dragstart].cb-dragging > .cb-tab {
+    background-color: var(--cb-focus-repl-navbar-controls-hover-color);
+}
+
 .cb-file-tab.active > .cb-tab ,
 .cb-file-tab.active > .cb-tab:hover {
     color: black;
@@ -759,7 +807,7 @@ ul.cb-file-tabs {
     background: url(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEgAAAAMCAYAAADBJPs9AAAAAXNSR0IArs4c6QAAAERlWElmTU0AKgAAAAgAAYdpAAQAAAABAAAAGgAAAAAAA6ABAAMAAAABAAEAAKACAAQAAAABAAAASKADAAQAAAABAAAADAAAAAA9QrhmAAAAbklEQVRIDe3SQQrAMAgEwLTkgT7VH7YsNOBB46Wn7OYiqAQcdgw9CUhAAv8LuPuT/Yp+nN3ZEksvQlQ3UwMBpUOa3UIle1IfBmZ2ZTfRJ2ihVEER0CdUJWhWgyV7ao2J2RnQJ2iHg3BQA3U4AHoB3jchQhvimSIAAAAASUVORK5CYII=);
     background-position: right;
     background-repeat: no-repeat;
-/*    background-color: #eb48ff; */
+/*    background-color: var(--cb-error-color); */
 }
 
 .cb-vm .CodeMirror,
@@ -880,7 +928,7 @@ ul.cb-file-tabs {
 .cb-repl-error.cm-hr,
 .cb-repl-error.cm-link,
 .cb-repl-error.cm-error {
-    color: #eb48ff;
+    color: var(--cb-error-color);
     font-family: Times;
     font-style: italic;
 }
@@ -959,13 +1007,13 @@ ul.cb-file-tabs {
 /*------------------------- Error messages --------------------------*/
 
 .cb-code-error {
-    background-color: #eb48ff;
+    background-color: var(--cb-error-color);
 }
 
 .cb-code-error-eol > span:after {
     content: " ";
 /*    content: "                                                                                                                                                                        "; /* there must be a better way to go to end of line... */
-    background-color: #eb48ff;
+    background-color: var(--cb-error-color);
 }
 
 /*-------------------------- Font size ------------------------------*/
@@ -1319,6 +1367,16 @@ div.tab-pane {
     right: 0;
     width: 300px;
     z-index: 999999;
+}
+
+div > a[data-cb-context-bundle-state],
+div > a[data-cb-context-bundle-executable] {
+    background-color: var(--cb-navbar-color-isolated);
+}
+
+div[data-cb-dev-mode] > a[data-cb-context-bundle-state],
+div[data-cb-dev-mode] > a[data-cb-context-bundle-executable] {
+    background-color: var(--cb-navbar-color);
 }
 
 /* -------------------------------------

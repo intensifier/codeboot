@@ -66,6 +66,7 @@ include/codemirror-5.56.0/mode/javascript/javascript.js \
 include/codemirror-5.56.0/mode/python/python.js \
 include/jspreadsheet-4.9.11/dist/jspreadsheet.js \
 include/jsuites-4.9.34/dist/jsuites.js \
+include/jsrsasign-8.0.20/jsrsasign-all-min.js \
 include/download.js \
 include/lang.js \
 include/lang/js/num.js \
@@ -83,6 +84,8 @@ include/lang/py/py.js \
 include/lang/py/pyinterp.js \
 include/lang/py/style.js \
 include/codeboot.js \
+include/config.js \
+include/sign.js \
 include/i18n.js \
 include/drawing.js \
 include/actions.js \
