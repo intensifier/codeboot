@@ -1278,6 +1278,7 @@ def py_parse_args_tail_after_comma(ts):
             args_tail_after_comma1 = py_parse_args_tail_after_comma(ts)
             args_tail_after_comma1[0].append(simple_arg1) # must be reversed later
             return args_tail_after_comma1
+        return [[simple_arg1], None]
     else:
         return py_syntax_error(ts, None)
 

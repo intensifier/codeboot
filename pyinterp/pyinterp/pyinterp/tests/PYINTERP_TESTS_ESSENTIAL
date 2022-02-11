@@ -1,0 +1,41 @@
+=== pyinterp tests (296 tests) ===
+ - /lambda (11 tests)
+     lambda1: ................................... [92mOK[0m
+     global2: ................................... [92mOK[0m
+     filter_lambda: ............................. [92mOK[0m
+     nonlocal1: ................................. [92mOK[0m
+     closure1: .................................. [92mOK[0m
+     map_lambda: ................................ [92mOK[0m
+     nested_lambda: ............................. [92mOK[0m
+     lambda2: ................................... [92mOK[0m
+     closure2: .................................. [92mOK[0m
+     global1: ................................... [92mOK[0m
+     unbound_error: ............................. [92mOK[0m
+ - /arithmetic (8 tests)
+     division_zero_3: ........................... [92mOK[0m
+     int_pow: ................................... [92mOK[0m
+     division_zero_1: ........................... [92mOK[0m
+     bool_arithmetic_float_mixup: ............... [92mOK[0m
+     int_comp: .................................. [92mOK[0m
+     division_zero: ............................. [92mOK[0m
+     bool_arithmetic: ........................... [92mOK[0m
+     division_zero_2: ........................... [92mOK[0m
+ - /arithmetic/float (26 tests)
+Traceback (most recent call last):
+  File "../run.py", line 149, in <module>
+    run_all(**args)
+  File "../run.py", line 129, in run_all
+    process_file(folder_test, folder, cpython, pyinterp, shared_lst)
+  File "../run.py", line 102, in process_file
+    success = run_one_test(path, cpython, pyinterp, tmp_output_file)
+  File "../run.py", line 68, in run_one_test
+    pyinterp_output = subprocess.run([*pyinterp.split(), path], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+  File "/usr/local/lib/python3.8/subprocess.py", line 495, in run
+    stdout, stderr = process.communicate(input, timeout=timeout)
+  File "/usr/local/lib/python3.8/subprocess.py", line 1028, in communicate
+    stdout, stderr = self._communicate(input, endtime, timeout)
+  File "/usr/local/lib/python3.8/subprocess.py", line 1868, in _communicate
+    ready = selector.select(timeout)
+  File "/usr/local/lib/python3.8/selectors.py", line 415, in select
+    fd_event_list = self._selector.poll(timeout)
+KeyboardInterrupt

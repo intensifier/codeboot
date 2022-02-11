@@ -184,6 +184,8 @@ def parse_function_signature(ts, posonly_and_default, args_and_defaults, vararg,
 ,"args_tail_after_comma: simple_arg [',' args_tail_after_comma.]":
     ["args_tail_after_comma1[0].append(simple_arg1) # must be reversed later\n"
      "return args_tail_after_comma1"]
+,"args_tail_after_comma: simple_arg [',' args_tail_after_comma].":
+    ["return [[simple_arg1], None]"]
 ,"args_tail_after_comma: kwargs.":
     ["return [[], kwargs1]"]
 

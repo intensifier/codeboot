@@ -50,3 +50,12 @@ def k(*args, foo, **kwargs):
 k(1, 2, 3, foo=4, x=5)
 k(1, 2, 3, x = 5, foo=4)
 k(1, 2, 3, y=5, z=10, foo=4, x=5)
+
+def f(x, y, z, *args, k, w):
+    print(x, y, z)
+    print(args)
+    print(k)
+    print(w)
+
+f(1, 2, 3, k=4, w=5)
+f(1, 2, 3, 4, 5, k=6, w=7)
