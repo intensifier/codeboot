@@ -23,14 +23,13 @@ const codebootCharts = (function () {
   //        empty refers to a quantitative value
   // yDesc: 'field_name:field_type', same as xDesc.
   // zDesc: 'field_name', treats z dimension as a color for multi-line charts.
-  function chart(args) {
+  function chart(rte, args) {
+    var vm = rte.vm;
     // It's simpler passing an argument array from pyinterp
     var data, markType, title, xDesc, yDesc, zDesc;
     // Convert to JS objects with FFI util
     args = pyinterp.OM_get_list_seq(args).map(py2host);
     [data, markType, title, xDesc, yDesc, zDesc] = args;
-
-    var chart = document.getElementsByClassName('cb-chart-window')[0];
 
     var _data = list_conv(data);
 
@@ -98,17 +97,22 @@ const codebootCharts = (function () {
       title = "";
     }
 
-    // Clear the last chart
-    chart.innerHTML = "";
+    vm.withElem('.cb-chart-window', function (chart) {
 
-    mark({ tooltip: true })
-      .title(title)
-      .data(_data)
-      .encode(...encodeArgs)
-      .render()
-      .then(viewElement => {
-        chart.appendChild(viewElement);
-      });
+      // Clear the last chart
+      chart.innerHTML = '';
+
+      mark({ tooltip: true })
+        .title(title)
+        .data(_data)
+        .encode(...encodeArgs)
+        .render()
+        .then(viewElement => {
+          chart.appendChild(viewElement);
+        });
+
+      vm.setPlaygroundToShow('chart');
+    });
 
     return 1;
   }

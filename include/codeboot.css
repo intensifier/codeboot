@@ -1334,6 +1334,10 @@ div.tab-pane {
     }
 }
 
+.cb-prompt-input {
+    width: 100%;
+}
+
 #cb-help-box .js-novice,
 #cb-help-box .js-standard,
 #cb-help-box .py-novice {
