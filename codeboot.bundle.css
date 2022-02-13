@@ -4634,6 +4634,10 @@ ul.cb-file-tabs {
 
 /*-------------------------- file editors ---------------------------*/
 
+.cb-editors{
+    overflow-x:hidden;
+}
+
 .cb-editors > .nav-tabs {
     border-bottom: 0;
 }
