@@ -15,7 +15,6 @@ function CodeBoot() {
     cb.vmCount = 0;
 
     cb.cmds = null;
-    cb.cmds_valid = false;
 
     cb.mouse = { x: 0,
                  y: 0,
@@ -87,7 +86,7 @@ CodeBoot.prototype.init = function () {
             cb.saveInProgress = false;
             return undefined;
         }
-        if (!cb.devMode) {
+        if (!cb.authoringMode) {
             return 'Your codeBoot session will be lost.'
         } else {
             return undefined;
@@ -111,13 +110,18 @@ CodeBoot.prototype.extractCommands = function (uri) {
 
     var pos = uri.lastIndexOf(cb.commandsPrefix);
 
-    if (pos < 0) return [false]; // empty commands and not verified
+    if (pos < 0) return [true]; // empty commands
 
     var init_str = uri.slice(pos + cb.commandsPrefix.length);
-    var parts = init_str.split(',');
+    var parts = init_str.split('.');
     var cmds = parts.slice(1);
+    var signature = parts[0];
 
-    cmds.unshift(cb.verifyString(cb.cmds.join(','), parts[0]));
+    if (signature === '') {
+        cmds.unshift(false);
+    } else {
+        cmds.unshift(cb.verifyString(cmds.join('.'), signature));
+    }
 
     return cmds;
 };
@@ -127,22 +131,7 @@ CodeBoot.prototype.extractCommandsFromLocation = function () {
 
     var cb = this;
 
-    var location = window.location;
-    var search = location.search;
-
-    if (search.slice(0, 6) === '?init=') {
-
-        var init_str = search.slice(6);
-        var parts = init_str.split(',');
-
-        cb.cmds = parts.slice(1);
-
-        if (!cb.isIsolatedLocation()) {
-            cb.cmds_valid = cb.verifyString(cb.cmds.join(','), parts[0]);
-        } else {
-            cb.cmds_valid = true;
-        }
-    }
+    cb.cmds = cb.extractCommands(window.location.href);
 };
 
 CodeBoot.prototype.isIsolatedLocation = function () {
@@ -167,6 +156,12 @@ CodeBoot.prototype.getCodeBootLocation = function (isolated) {
     var pathname = location.pathname;
 
     var subdomain = '';
+
+    if (!(protocol === 'http:' || protocol === 'https:')) {
+        protocol = 'https:';
+        host = cb.homeDomain;
+        pathname = '/' + cb.version + '/';
+    }
 
     if (isolated && !cb.isIsolatedLocation()) {
         subdomain = cb.isolatedSubdomain;
@@ -353,7 +348,9 @@ CodeBoot.prototype.setupAllVM = function (elem) {
                 var cmds = cb.cmds;
                 if (cmds) {
                     cb.cmds = null;
-                    opts.cmds = cmds;
+                    if (cmds[0] === true || cb.isIsolatedLocation()) {
+                        opts.cmds = cmds.slice(1);
+                    }
                 }
                 new CodeBootVM(opts);
             }
@@ -375,8 +372,9 @@ CodeBoot.prototype.setupAllVM = function (elem) {
                     if (source !== null) {
                         var levels = lang.prototype.getLevels();
                         var exts = lang.prototype.getExts();
-                        var cmds = ['F' + toSafeBase64('script' + exts[0]),
-                                    toSafeBase64(source),
+                        var cmds = [CodeBoot.prototype.fileToCommand(true,
+                                                                     'script' + exts[0],
+                                                                     source),
                                     'e'];
                         var opts = {
                             lang: lang.prototype.getId() + '-' +
@@ -396,6 +394,12 @@ CodeBoot.prototype.setupAllVM = function (elem) {
     }
 
     loop();
+};
+
+CodeBoot.prototype.fileToCommand = function (activated, filename, content) {
+    return (activated ? 'F' : 'f') +
+           CodeBoot.prototype.stringToBase64URL(filename) + '~' +
+           CodeBoot.prototype.longStringToBase64URL(content);
 };
 
 CodeBoot.prototype.zIndexFromLevel = function (level) {
@@ -468,6 +472,79 @@ function getCodeBootVM(elem) {
     }
 
     return vm;
+};
+
+CodeBoot.prototype.stringToBase64URL = function (str) {
+    var bytes = CodeBoot.prototype.stringToUTF8(str);
+    return CodeBoot.prototype.bytesToBase64URL(bytes);
+};
+
+CodeBoot.prototype.longStringToBase64URL = function (str) {
+    var bytes = CodeBoot.prototype.longStringToSignedBytes(str);
+    return CodeBoot.prototype.bytesToBase64URL(bytes);
+};
+
+CodeBoot.prototype.base64URLToString = function (b64) {
+    return CodeBoot.prototype.UTF8ToString(
+        CodeBoot.prototype.base64URLToBytes(b64));
+};
+
+CodeBoot.prototype.base64URLToLongString = function (b64) {
+    return CodeBoot.prototype.signedBytesToLongString(
+        CodeBoot.prototype.base64URLToSignedBytes(b64));
+};
+
+CodeBoot.prototype.bytesToBase64URL = function (bytes) {
+    var str = '';
+    var len = bytes.length;
+    for (var i=0; i<len; i++) {
+        str += String.fromCharCode(bytes[i] & 0xff);
+    }
+    return CodeBoot.prototype.stringToBase64URL(str);
+};
+
+CodeBoot.prototype.base64URLToBytes = function (b64) {
+    var str = CodeBoot.prototype.base64URLToString(b64);
+    var len = str.length;
+    var bytes = new Uint8Array(len);
+    for (var i=0; i<len; i++) {
+        bytes[i] = str.charCodeAt(i);
+    }
+    return bytes;
+};
+
+CodeBoot.prototype.base64URLToSignedBytes = function (b64) {
+    var str = CodeBoot.prototype.base64URLToString(b64);
+    var len = str.length;
+    var bytes = new Int8Array(len);
+    for (var i=0; i<len; i++) {
+        bytes[i] = ((str.charCodeAt(i)+128) & 0xff) - 128;
+    }
+    return bytes;
+};
+
+CodeBoot.prototype.stringToBase64URL = function (b64) {
+    return btoa(b64).replace(/\+/g,'-').replace(/\//g,'_');
+};
+
+CodeBoot.prototype.base64URLToString = function (b64) {
+    return atob(b64.replace(/-/g,'+').replace(/_/g,'/'));
+};
+
+CodeBoot.prototype.stringToUTF8 = function (str) {
+    return new TextEncoder().encode(str);
+};
+
+CodeBoot.prototype.UTF8ToString = function (bytes) {
+    return new TextDecoder().decode(bytes);
+};
+
+CodeBoot.prototype.longStringToSignedBytes = function (str) {
+    return LZMA.compress(str);
+};
+
+CodeBoot.prototype.signedBytesToLongString = function (bytes) {
+    return LZMA.decompress(bytes);
 };
 
 CodeBoot.prototype.escapeHTML = function (str) {
@@ -547,15 +624,14 @@ function CodeBootVM(opts) {
     function set_options(opts) {
         var cmds = opts.cmds;
         if (cmds) {
-            opts.persistent = false; // default is to not load/save session
             opts.cmds = [];
             for (var i=0; i<cmds.length; i++) {
                 var cmd = cmds[i];
-                var colon = cmd.indexOf(':');
-                if (colon > 0) {
-                    var name = cmd.slice(0, colon);
-                    var value = cmd.slice(colon+1);
-                    opts[name] = value;
+                if (cmd[0] === '~') {
+                    var parts = cmd.slice(1).split('=');
+                    if (parts.length === 2) {
+                        opts[parts[0]] = parts[1];
+                    }
                 } else {
                     opts.cmds.push(cmd);
                 }
@@ -576,7 +652,7 @@ function CodeBootVM(opts) {
     vm.level = null;   // the selected level of the language
     vm.vmClone = null;
     vm.isOpen = true;
-    vm.embedded = false; // assume the vm is not embedded. Will be if pre tag is used
+    vm.embedded = false; // will be true when pre tag is used
     vm.privkey = null;
 
     vm.storageId = get_option_attr('storageId', 'data-cb-storage-id', id);
@@ -597,6 +673,7 @@ function CodeBootVM(opts) {
     new CodeBootFileSystem(vm); // initializes vm.fs
 
     vm.devMode = false;
+    vm.authoringMode = false;
     vm.showLineNumbers = undefined;
     vm.largeFont = undefined;
     vm.animationSpeed = undefined;
@@ -684,21 +761,23 @@ function CodeBootVM(opts) {
 
     vm.setFloating(floating);
 
-    if (get_option('persistent', 'data-cb-persistent', true)) {
+    if (cb.isIsolatedLocation()) {
+        vm.clearAllStorage();
+    } else if (get_option('persistent', 'data-cb-persistent', true)) {
         vm.beginSession();
     }
 
-    vm.updatePlayground();
+    vm.updateUI();
 
     initLast();
 
-    if (opts.input !== undefined)
+    if (opts.input)
         vm.replSetInput(opts.input);
 
-    if (opts.event !== undefined)
+    if (opts.event)
         vm.execEvent(opts.event);
 
-    if (opts.cmds !== undefined)
+    if (opts.cmds)
         vm.execCommands(opts.cmds);
 
     if (cb.vmsCreated === 1) {
@@ -717,21 +796,25 @@ CodeBootVM.prototype.execCommands = function (cmds) {
     var fileToActivate = null;
 
     for (var i=0; i<cmds.length; i++) {
+
         var cmd = cmds[i];
         var op = cmd[0];
+
         switch (op) {
+
         case 'i': // add input
-            var input = fromSafeBase64(cmd.slice(1));
+            var input = vm.cb.base64URLToString(cmd.slice(1));
             vm.replSetInput(input);
             vm.repl.focus();
             fileToActivate = null;
             break;
+
         case 'f': // create a file
         case 'F':
-            i++;
-            if (i<cmds.length) {
-                var filename = fromSafeBase64(cmd.slice(1));
-                var content = fromSafeBase64(cmds[i]);
+            var parts = cmd.slice(1).split('~');
+            if (parts.length === 2) {
+                var filename = vm.cb.base64URLToString(parts[0]);
+                var content = vm.cb.base64URLToLongString(parts[1]);
                 var file = vm.fs.createFile(filename, content);
                 file.fe.edit();
                 if (op === 'F') {
@@ -741,6 +824,7 @@ CodeBootVM.prototype.execCommands = function (cmds) {
                 }
             }
             break;
+
         case 'e': // eval
         case 'a': // animate
             var pauseAtStepCount = Infinity;
@@ -748,7 +832,7 @@ CodeBootVM.prototype.execCommands = function (cmds) {
                 pauseAtStepCount = +cmd.slice(1);
             }
             if (!(pauseAtStepCount > 0)) {
-                vm.showTryMeTooltip();
+                //vm.showTryMeTooltip();
             } else {
                 vm.pauseAtStepCount = pauseAtStepCount;
             }
@@ -756,6 +840,33 @@ CodeBootVM.prototype.execCommands = function (cmds) {
                 vm.execEvent('eval');
             } else {
                 vm.execEvent('animate');
+            }
+            break;
+
+        case '~': // settings
+            var parts = cmd.slice(1).split('=');
+            if (parts.length === 2) {
+                switch (parts[0]) {
+                case 'lang':
+                    vm.setLang(parts[1]);
+                    vm.setLangUI();
+                    break;
+                case 'showLineNumbers':
+                    vm.setShowLineNumbers(parts[1] === 'true');
+                    break;
+                case 'largeFont':
+                    vm.setLargeFont(parts[1] === 'true');
+                    break;
+                case 'hidden':
+                    vm.setHidden(parts[1] === 'true');
+                    break;
+                case 'floating':
+                    vm.setFloating(parts[1] === 'true');
+                    break;
+                case 'animationSpeed':
+                    vm.setAnimationSpeed(parts[1]);
+                    break;
+                }
             }
             break;
         }
@@ -772,69 +883,77 @@ CodeBootVM.prototype.getLocation = function () {
     return location;
 };
 
-CodeBootVM.prototype.stateToURL = function (executable, cont) {
+CodeBootVM.prototype.toURL = function (type) {
 
     var vm = this;
     var cmds = [];
-
-    if (vm.root.hasAttribute('data-cb-show-line-numbers')) {
-        cmds.push('showLineNumbers:true');
-    }
-
-    if (vm.root.hasAttribute('data-cb-large-font')) {
-        cmds.push('largeFont:true');
-    }
-
-    if (vm.root.hasAttribute('data-cb-hidden')) {
-        cmds.push('hidden:true');
-    }
-
-    if (vm.root.hasAttribute('data-cb-floating')) {
-        cmds.push('floating:true');
-    }
 
     vm.forEachElem('.cb-file-tab', function (elem) {
         var filename = elem.getAttribute('data-cb-file-tab-filename');
         if (filename) {
             var file = vm.fs.getByName(filename);
             if (file) {
-                cmds.push((file.fe.isActivated() ? 'F' : 'f') +
-                          toSafeBase64(file.filename) + ',' +
-                          toSafeBase64(file.getContent()));
+                cmds.push(file.toCommand());
             }
         }
     });
 
-    if (executable) {
-        cmds.push('e');
-    } else if (vm.ui.mode === vm.modeStepping()) {
-        cmds.push('e' + vm.lang.getStepCount());
-    } else if (vm.ui.mode === vm.modeAnimating() && vm.stepDelay > 0) {
-        if (vm.animationSpeed !== 'normal') {
-            cmds.push('animationSpeed:' + vm.animationSpeed);
-        }
-        cmds.push('a');
+    if (cmds.length === 0) return null;
+
+    cmds.push('~lang=' + vm.root.getAttribute('data-cb-lang'));
+
+    if (vm.root.hasAttribute('data-cb-show-line-numbers')) {
+        cmds.push('~showLineNumbers=true');
     }
 
-    cont(vm.commandsToURL(cmds, false));
+    if (vm.root.hasAttribute('data-cb-large-font')) {
+        cmds.push('~largeFont=true');
+    }
+
+    if (type === 'web_app' || vm.root.hasAttribute('data-cb-hidden')) {
+        cmds.push('~hidden=true');
+    }
+
+    if (type !== 'web_app' && vm.root.hasAttribute('data-cb-floating')) {
+        cmds.push('~floating=true');
+    }
+
+    if (type === 'web_app') {
+        cmds.push('e');
+    } else if (type === 'pause' || type === 'animate' || type === 'execute') {
+        var op = type === 'animate' ? 'a' : 'e';
+        if (type === 'animate' && vm.animationSpeed !== 'normal') {
+            cmds.push('~animationSpeed=' + vm.animationSpeed);
+        }
+        if (type !== 'execute' && vm.ui.mode === vm.modeStepping()) {
+            var steps = vm.lang.getStepCount();
+            cmds.push(op + steps);
+        } else if (type === 'pause') {
+            cmds.push(op + '1');
+        } else {
+            cmds.push(op);
+        }
+    }
+
+    return vm.commandsToURL(cmds, false);
 };
 
-/*deprecated*/
+/*deprecated
 CodeBootVM.prototype.commandsToURLOLD = function (cmds, cont) {
 
     var vm = this;
     var location = vm.getLocation();
-    var cmds_str = ',' + cmds.join(',');
+    var cmds_str = '.' + cmds.join('.');
 
     if (vm.cb.privkey) {
         vm.cb.signWithKey(
-            toUint8Array(cmds_str),
+            stringToUTF8(cmds_str),
             vm.cb.privkey,
             function (signature) {
                 if (signature) {
                     var url = location +
                               vm.cb.commandsPrefix +
-                              toSafeBase64FromUint8Array(signature) +
+                              toBase64URLFromBytes(signature) +
                               cmds_str;
                     cont(url);
                 } else {
@@ -845,17 +964,16 @@ CodeBootVM.prototype.commandsToURLOLD = function (cmds, cont) {
         cont(null);
     }
 };
+*/
 
 CodeBootVM.prototype.commandsToURL = function (cmds, isolated) {
 
     var vm = this;
     var location = vm.getLocation();
-    var cmds_str = ',' + cmds.join(',');
+    var cmds_str = cmds.join('.');
     var signature = '';
 
-    console.log(vm.privkey);
-
-    if (vm.devMode && vm.privkey !== null) {
+    if (vm.authoringMode && vm.privkey !== null) {
         var sig = CodeBoot.prototype.signString(cmds_str, vm.privkey);
         if (sig === null) {
             isolated = true;
@@ -866,13 +984,27 @@ CodeBootVM.prototype.commandsToURL = function (cmds, isolated) {
         isolated = true;
     }
 
-    if (isolated) {
-        location = 'https://app.codeboot.org/cegep/demo/';/*TODO: generate if in devMode */
-    } else {
-        location = 'https://codeboot.org/cegep/demo/';/*TODO: generate if in devMode */
-    }
+    location = vm.cb.getCodeBootLocation(isolated);
 
-    return location + vm.cb.commandsPrefix + signature + cmds_str;
+    var url = location + vm.cb.commandsPrefix + signature + '.' + cmds_str;
+
+    if (url.length > 8000) return null; // refuse to create long URLs
+
+    return url
+};
+
+CodeBootVM.prototype.allowURLCreation = function () {
+
+    var vm = this;
+
+    return !vm.cb.isIsolatedLocation() && vm.authoringMode && vm.privkey !== null;
+};
+
+CodeBootVM.prototype.allowURLImport = function () {
+
+    var vm = this;
+
+    return !vm.cb.isIsolatedLocation();
 };
 
 CodeBootVM.prototype.beginSession = function () {
@@ -1111,6 +1243,19 @@ function update_playground_visibility(vm) {
 */
 };
 
+CodeBootVM.prototype.updateUI = function () {
+
+    var vm = this;
+
+    vm.updatePlayground();
+
+    if (document.querySelector('#main:not(:empty)')) {
+        if (!vm.root.hasAttribute('data-cb-hidden')) {
+            vm.setFloating(true);
+        }
+    }
+};
+
 CodeBootVM.prototype.loadLang = function (id) {
 
     var vm = this;
@@ -1289,6 +1434,19 @@ CodeBootVM.prototype.menuSettingsHTML = function () {
     <h5 class="dropdown-header">' + vm.polyglotHTML('Language') + '</h5>\
 ' + vm.langsUI.map(function (x) { return '    <a href="#" class="dropdown-item" data-cb-setting-ui-lang="' + x[0] + '">' + vm.SVG['checkmark'] + '&nbsp;&nbsp;' + CodeBoot.prototype.escapeHTML(x[1]) + '</a>\n'; }).join('') + '\
 \
+    <div class="cb-authoring-mode">\
+\
+      <div class="dropdown-divider"></div>\
+\
+      <h5 class="dropdown-header">' + vm.polyglotHTML('Content authoring') + '</h5>\
+      <a href="#" class="dropdown-item" data-cb-student-mode>' + vm.SVG['checkmark'] + '&nbsp;&nbsp;' + vm.polyglotHTML('Return to student mode') + '</a>\
+\
+      <div class="dropdown-divider"></div>\
+\
+      <a href="#" class="dropdown-item" data-cb-reset-filesystem>' + vm.SVG['checkmark'] + '&nbsp;&nbsp;' + vm.polyglotHTML('Reset filesystem') + '</a>\
+\
+    </div>\
+\
   </div>\
 </span>\
 ';
@@ -1301,15 +1459,30 @@ CodeBootVM.prototype.menuContextHTML = function () {
     return '\n\
 <div class="cb-menu-context dropdown-menu" style="display: none;">\n\
 \n\
-  <a href="#" class="dropdown-item" data-cb-context-presentation="full">' + vm.SVG['checkmark'] + '&nbsp;&nbsp;Full window</a>\n\
+  <a href="#" class="dropdown-item" data-cb-context-presentation="full">' + vm.SVG['checkmark'] + '&nbsp;&nbsp;' + vm.polyglotHTML('Full window') + '</a>\n\
 \n\
-  <a href="#" class="dropdown-item" data-cb-context-presentation="floating">' + vm.SVG['checkmark'] + '&nbsp;&nbsp;Floating window</a>\n\
+  <a href="#" class="dropdown-item" data-cb-context-presentation="floating">' + vm.SVG['checkmark'] + '&nbsp;&nbsp;' + vm.polyglotHTML('Floating window') + '</a>\n\
 \n\
-  <a href="#" class="dropdown-item" data-cb-context-presentation="hidden">' + vm.SVG['checkmark'] + '&nbsp;&nbsp;Hide codeBoot</a>\n\
+  <a href="#" class="dropdown-item" data-cb-context-presentation="hidden">' + vm.SVG['checkmark'] + '&nbsp;&nbsp;' + vm.polyglotHTML('Hide codeBoot') + '</a>\n\
 \n\
-  <a href="#" class="dropdown-item" data-cb-context-bundle-state>' + vm.SVG['checkmark'] + '&nbsp;&nbsp;Bundle state to clipboard</a>\n\
+  <div class="cb-bundle-to-clipboard">\n\
 \n\
-  <a href="#" class="dropdown-item" data-cb-context-bundle-executable>' + vm.SVG['checkmark'] + '&nbsp;&nbsp;Bundle executable to clipboard</a>\n\
+    <div class="dropdown-divider"></div>\n\
+\n\
+    <h5 class="dropdown-header">' + vm.polyglotHTML('Bundle to clipboard') + '</h5>\n\
+    <a href="#" class="dropdown-item" data-cb-context-bundle-web-app>' + vm.SVG['play-inf'] + '&nbsp;&nbsp;' + vm.polyglotHTML('Web app') + '</a>\n\
+\n\
+    <div class="cb-authoring-mode">\n\
+\n\
+      <a href="#" class="dropdown-item" data-cb-context-bundle-step>' + vm.SVG['play-pause'] + '&nbsp;&nbsp;' + vm.polyglotHTML('Single-step') + '</a>\n\
+\n\
+      <a href="#" class="dropdown-item" data-cb-context-bundle-animate>' + vm.SVG['play'] + '&nbsp;&nbsp;' + vm.polyglotHTML('Animate') + '</a>\n\
+\n\
+      <a href="#" class="dropdown-item" data-cb-context-bundle-execute>' + vm.SVG['play-inf'] + '&nbsp;&nbsp;' + vm.polyglotHTML('Execute') + '</a>\n\
+\n\
+    </div>\n\
+\n\
+  </div>\n\
 \n\
 </div>\n\
 ';
@@ -2990,7 +3163,7 @@ CodeBootVM.prototype.initRoot = function (opts, floating) {
 
         vm.setUILanguageFromBrowser();
     }
-    
+
     if (vm.root.tagName === 'PRE') {
 
 
@@ -3058,42 +3231,6 @@ CodeBootVM.prototype.initRoot = function (opts, floating) {
     return initLast;
 };
 
-CodeBootVM.prototype.setUILanguageFromBrowser = function () {
-
-    var vm = this;
-
-    var languages = navigator.languages;
-    var lang = null;
-
-    for (var i=vm.langsUI.length-1; i>=0; i--) {
-        var langUI = vm.langsUI[i][0];
-        for (var j=0; j<languages.length; j++) {
-            if (langUI === languages[j]) {
-                lang = langUI;
-                break;
-            }
-        }
-    }
-
-    if (lang === null) {
-        for (var i=vm.langsUI.length-1; i>=0; i--) {
-            var langUI = vm.langsUI[i][0];
-            for (var j=0; j<languages.length; j++) {
-                if (languages[j].indexOf(langUI+'-') === 0) {
-                    lang = langUI;
-                    break;
-                }
-            }
-        }
-    }
-
-    if (lang === null) {
-        lang = 'en';
-    }
-
-    vm.setAttribute('lang', lang);
-};
-
 CodeBootVM.prototype.initCommon = function (opts) {
 
     var vm = this;
@@ -3105,8 +3242,10 @@ CodeBootVM.prototype.initCommon = function (opts) {
 
     if (ctxmenu) {
 
-        var bundle_state_url = null;
-        var bundle_executable_url = null;
+        var bundle_web_app_url = null;
+        var bundle_paused_program_url = null;
+        var bundle_animated_program_url = null;
+        var bundle_executable_program_url = null;
 
         function dismiss() {
             ctxmenu.style.display = 'none';
@@ -3132,14 +3271,19 @@ CodeBootVM.prototype.initCommon = function (opts) {
                         vm.setHidden(false);
                         vm.setFloating(false);
                     }
-                } else if (elem.hasAttribute('data-cb-context-bundle-state')) {
-                    vm.copyTextToClipboard(bundle_state_url);
+                } else if (elem.hasAttribute('data-cb-context-bundle-web-app')) {
+                    vm.copyTextToClipboard(bundle_web_app_url);
                     vm.focusLastFocusedEditor();
-                } else if (elem.hasAttribute('data-cb-context-bundle-executable')) {
-                    vm.copyTextToClipboard(bundle_executable_url);
+                } else if (elem.hasAttribute('data-cb-context-bundle-step')) {
+                    vm.copyTextToClipboard(bundle_paused_program_url);
+                    vm.focusLastFocusedEditor();
+                } else if (elem.hasAttribute('data-cb-context-bundle-animate')) {
+                    vm.copyTextToClipboard(bundle_animated_program_url);
+                    vm.focusLastFocusedEditor();
+                } else if (elem.hasAttribute('data-cb-context-bundle-execute')) {
+                    vm.copyTextToClipboard(bundle_executable_program_url);
                     vm.focusLastFocusedEditor();
                 }
-
                 dismiss();
                 event.stopPropagation();
                 event.preventDefault();
@@ -3151,10 +3295,14 @@ CodeBootVM.prototype.initCommon = function (opts) {
             var vm = getCodeBootVM(event.target);
 
             function done() {
-                if (vm.devMode) {
-                    ctxmenu.setAttribute('data-cb-dev-mode', true);
+                var language = vm.root.getAttribute('lang');
+                if (language) {
+                    ctxmenu.setAttribute('lang', language);
+                }
+                if (vm.authoringMode) {
+                    ctxmenu.setAttribute('data-cb-authoring-mode', true);
                 } else {
-                    ctxmenu.removeAttribute('data-cb-dev-mode');
+                    ctxmenu.removeAttribute('data-cb-authoring-mode');
                 }
                 ctxmenu.querySelectorAll('.cb-svg-checkmark').forEach(function (elem) {
                     elem.style.visibility = 'hidden';
@@ -3170,21 +3318,48 @@ CodeBootVM.prototype.initCommon = function (opts) {
                 if (elem) {
                     elem.style.visibility = 'visible';
                 }
-                elem = ctxmenu.querySelector('a[data-cb-context-bundle-state]');
-                if (elem) {
-                    elem.style.display = (bundle_state_url === null) ? 'none' : 'inline';
+                elem = ctxmenu.querySelector('a[data-cb-context-bundle-web-app]');
+                if (elem && bundle_web_app_url === null) {
+                    elem.style.display = 'none';
+                } else {
+                    elem.removeAttribute('style');
                 }
-                elem = ctxmenu.querySelector('a[data-cb-context-bundle-executable]');
+                elem = ctxmenu.querySelector('a[data-cb-context-bundle-step]');
+                if (elem && bundle_paused_program_url === null) {
+                    elem.style.display = 'none';
+                } else {
+                    elem.removeAttribute('style');
+                }
+                elem = ctxmenu.querySelector('a[data-cb-context-bundle-animate]');
+                if (elem && bundle_animated_program_url === null) {
+                    elem.style.display = 'none';
+                } else {
+                    elem.removeAttribute('style');
+                }
+                elem = ctxmenu.querySelector('a[data-cb-context-bundle-execute]');
+                if (elem && bundle_executable_program_url === null) {
+                    elem.style.display = 'none';
+                } else {
+                    elem.removeAttribute('style');
+                }
+                elem = ctxmenu.querySelector('div.cb-bundle-to-clipboard');
                 if (elem) {
-                    elem.style.display = (bundle_executable_url === null) ? 'none' : 'inline';
+                    if (bundle_web_app_url === null &&
+                        bundle_paused_program_url === null &&
+                        bundle_animated_program_url === null &&
+                        bundle_executable_program_url === null) {
+                        elem.style.display = 'none';
+                    } else {
+                        elem.removeAttribute('style');
+                    }
                 }
                 ctxmenu.style.left = (event.pageX - 15) + 'px';
                 ctxmenu.style.top = (event.pageY - 15) + 'px';
                 ctxmenu.style.display = 'block';
             }
 
-            if (!(event.shiftKey && event.ctrlKey))
-                return; // ignore if shift and ctrl key not pressed
+            if (!event.altKey)
+                return; // ignore if alt key not pressed
 
             if (vm &&
                 !(event.target.closest('.cb-drawing-window') ||
@@ -3194,20 +3369,11 @@ CodeBootVM.prototype.initCommon = function (opts) {
                 event.preventDefault();
 
                 if (ctxmenu.style.display === 'none') {
-                    console.log('111111111111111');
-                    vm.stateToURL(
-                        false,
-                        function (state_url) {
-                            console.log('22222222222222 '+state_url);
-                            vm.stateToURL(
-                                true,
-                                function (executable_url) {
-                                    console.log('3333333333333 '+executable_url);
-                                    bundle_state_url = state_url;
-                                    bundle_executable_url = executable_url;
-                                    done();
-                                })
-                        })
+                    bundle_web_app_url = vm.toURL('web_app');
+                    bundle_paused_program_url = vm.toURL('pause');
+                    bundle_animated_program_url = vm.toURL('animate');
+                    bundle_executable_program_url = vm.toURL('execute');
+                    done();
                 }
             }
         });
@@ -3302,6 +3468,9 @@ CodeBootVM.prototype.handleDrop = function (event) {
     var vm = this;
     var dt = event.dataTransfer;
 
+    event.preventDefault();
+    event.stopPropagation();
+
     if ('files' in dt && dt.files.length > 0) {
         vm.dropFiles(dt.files);
     } else {
@@ -3348,7 +3517,7 @@ CodeBootVM.prototype.readDroppedFile = function (file, cont) {
     var reader = new FileReader();
 
     reader.addEventListener('loadend', function () {
-        cont(filename, decodeUtf8(reader.result));
+        cont(filename, decodeUTF8FileReader(reader));
     });
 
     reader.readAsArrayBuffer(file);
@@ -3376,7 +3545,7 @@ CodeBootVM.prototype.dropFile = function (filename, content) {
     }
 };
 
-function decodeUtf8(arrayBuffer) {
+function decodeUTF8FileReader(reader) {
 
   var result = '';
   var i = 0;
@@ -3384,10 +3553,11 @@ function decodeUtf8(arrayBuffer) {
   var c1 = 0;
   var c2 = 0;
 
-  var data = new Uint8Array(arrayBuffer);
+  var data = new Uint8Array(reader.result);
 
   // If we have a BOM skip it
-  if (data.length >= 3 && data[0] === 0xef && data[1] === 0xbb && data[2] === 0xbf) {
+  if (data.length >= 3 &&
+      data[0] === 0xef && data[1] === 0xbb && data[2] === 0xbf) {
     i = 3;
   }
 
@@ -3414,6 +3584,7 @@ function decodeUtf8(arrayBuffer) {
       i += 3;
     }
   }
+
   return result;
 }
 
@@ -3423,17 +3594,17 @@ CodeBootVM.prototype.dropURIList = function (URIList) {
     var cb = vm.cb;
 
     var all_verified = true;
-    var cmds_array = [];
+    var cmds = [];
 
     for (var i=0; i<URIList.length; i++) {
-        var cmds = cb.extractCommands(URIList[i]);
-        all_verified = all_verified && cmds[0];
-        cmds_array.push(cmds.slice(1));
+        var cmds_from_uri = cb.extractCommands(URIList[i]);
+        all_verified = all_verified && cmds_from_uri[0];
+        cmds = cmds.concat(cmds_from_uri.slice(1));
     }
 
-    console.log('---------- CodeBootVM.prototype.dropURIList');
-    console.log(all_verified);
-    console.log(cmds_array);
+    if (all_verified || cb.isIsolatedLocation()) {
+        vm.execCommands(cmds);
+    }
 };
 
 //-----------------------------------------------------------------------------
@@ -3679,6 +3850,24 @@ CodeBootVM.prototype.setupEventHandlers = function () {
         });
     });
 
+    if (!vm.cb.isIsolatedLocation()) {
+        vm.withElem('.cb-menu-settings', function (elem) {
+            vm.setupDropHandler(elem, function (event) {
+
+                var dt = event.dataTransfer;
+
+                event.preventDefault();
+                event.stopPropagation();
+
+                if ('files' in dt && dt.files.length === 1) {
+                    vm.readDroppedFile(dt.files[0], function (filename, content) {
+                        vm.setLicense(content);
+                    });
+                }
+            });
+        });
+    }
+
     vm.forEachElem('.cb-menu-settings .dropdown-item', function (elem) {
         elem.addEventListener('click', function (event) {
 
@@ -3704,8 +3893,16 @@ CodeBootVM.prototype.setupEventHandlers = function () {
                 vm.updatePlayground();
             } else if (val = elem.getAttribute('data-cb-setting-ui-lang')) {
                 vm.setAttribute('lang', val);
+            } else if (elem.hasAttribute('data-cb-student-mode')) {
+                vm.setLicense(null);
+            } else if (elem.hasAttribute('data-cb-reset-filesystem')) {
+                vm.confirmHTML(vm.polyglotHTML('Reset filesystem? This cannot be undone.'),
+                               function (yes) {
+                                   if (yes) {
+                                       vm.fs.init();
+                                   }
+                               });
             }
-
             return true;
         });
     });
@@ -3803,14 +4000,26 @@ CodeBootVM.prototype.setupDropHandler = function (elem, handler) {
 
     var vm = this;
 
-    function onDragEnter(event) {
-        onDragOver(event);
+    var dragoverNest = 0;
+
+    function resetDragoverNest() {
+        dragoverNest = 0;
+        elem.classList.remove('cb-drag-over');
     }
 
-    function onDragLeave(event) {
+    function handleDragEnter(event) {
+        if (dragoverNest++ === 0) {
+            elem.classList.add('cb-drag-over');
+        }
     }
 
-    function onDragOver(event) {
+    function handleDragLeave(event) {
+        if (--dragoverNest === 0) {
+            resetDragoverNest();
+        }
+    }
+
+    function handleDragOver(event) {
         if (handler !== undefined) {
             event.dataTransfer.dropEffect = 'copy';
         }
@@ -3818,17 +4027,19 @@ CodeBootVM.prototype.setupDropHandler = function (elem, handler) {
         event.stopPropagation();
     }
 
-    function onDrop(event) {
+    function handleDrop(event) {
+        resetDragoverNest();
         event.preventDefault();
+        event.stopPropagation(); // stops the browser from redirecting.
         if (handler !== undefined) {
             handler(event);
         }
     }
 
-    elem.addEventListener('dragenter', onDragEnter);
-    elem.addEventListener('dragleave', onDragLeave);
-    elem.addEventListener('dragover', onDragOver);
-    elem.addEventListener('drop', onDrop);
+    elem.addEventListener('dragenter', handleDragEnter);
+    elem.addEventListener('dragleave', handleDragLeave);
+    elem.addEventListener('dragover', handleDragOver);
+    elem.addEventListener('drop', handleDrop);
 };
 
 CodeBootVM.prototype.toggleHidden = function () {
@@ -3872,10 +4083,6 @@ CodeBootVM.prototype.setFloating = function (floating) {
         var maxY = window.innerHeight;
         var width = Math.max(vm.minWidth, Math.floor(maxX*2/3));
         var height = Math.max(vm.minHeight, Math.floor(maxY*2/3));
-        // var left = Math.max(0, (maxX - width) / 2);
-        // var top = Math.max(0, maxY - height - 20);
-        var left = 0
-        var top = 0
 
         if (elem.latest_width_height !== undefined) {
             width = elem.latest_width_height.width;
@@ -3884,15 +4091,22 @@ CodeBootVM.prototype.setFloating = function (floating) {
 
         change_width_height(elem, width, height);
 
+        var left = 0
+        var top = 0
+        var lower_right_corner = true;
+
         if (elem.latest_left_top !== undefined) {
             left = elem.latest_left_top.left;
             top = elem.latest_left_top.top;
+        } else if (lower_right_corner) {
+            left = Math.max(0, maxX - width - 20);
+            top = Math.max(0, maxY - height - 20);
         }
 
         change_left_top(elem, left, top);
     }
-    else{
-      if (!vm.embedded){
+    else {
+      if (!vm.embedded) {
         elem.style.height = '100vh';
         elem.style.width = '100%'
       }
@@ -3966,7 +4180,7 @@ CodeBootVM.prototype.setupMoveRezizeHandlers = function () {
     }
 
     function mousemove(event) {
-        
+
         // All positions are relative to parent element
         var boundingBox = elem.getBoundingClientRect()
 
@@ -3990,7 +4204,7 @@ CodeBootVM.prototype.setupMoveRezizeHandlers = function () {
         var dx = clientX - latestX;
         var dy = clientY - latestY;
 
-        var curX = elem.offsetLeft; 
+        var curX = elem.offsetLeft;
         var curY = elem.offsetTop;
 
         // Difference between the "left" and "top" properties and the actual x,y values
@@ -4068,28 +4282,41 @@ CodeBootVM.prototype.setDevMode = function (devMode) {
 
     if (devMode !== vm.devMode) {
 
-        function done() {
-            vm.devMode = devMode;
-            vm.setAttribute('data-cb-dev-mode', devMode);
+        vm.devMode = devMode;
+        vm.setAttribute('data-cb-dev-mode', devMode);
+        vm.stateChanged();
+    }
+};
+
+CodeBootVM.prototype.setLicense = function (license) {
+
+    var vm = this;
+
+    function setMode(authoringMode) {
+        if (vm.authoringMode !== authoringMode) {
+            vm.authoringMode = authoringMode;
+            vm.setAttribute('data-cb-authoring-mode', authoringMode);
             vm.stateChanged();
         }
-
-        if (devMode) {
-            vm.promptHTML('Private key?', function (privkey) {
-                console.log('PRIVKEY='+privkey);
-                if (privkey !== null && privkey !== '') {
-                    var keys = [privkey];
-                    keys = CodeBoot.prototype.setupKeys(keys);
-                    if (keys.length === 1) {
-                        vm.privkey = keys[0];
-                    }
-                }
-                done();
-            });
-        } else {
-            done();
-        }
     }
+
+    if (license) {
+        var keys = CodeBoot.prototype.setupKeys([license]);
+        if (keys.length === 1) {
+            var priv = keys[0];
+            var test = '';
+            var sig = CodeBoot.prototype.signString(test, priv);
+            if (sig !== null &&
+                CodeBoot.prototype.verifyString(test, sig)) {
+                // license is valid
+                vm.privkey = priv;
+                return setMode(true);
+            }
+        }
+        alert(vm.tformat('The license file is invalid or corrupted'));
+    }
+
+    setMode(false);
 };
 
 CodeBootVM.prototype.toggleDevMode = function () {

@@ -37,6 +37,13 @@ CodeBootVM.prototype.clearStorage = function () {
     localStorage.removeItem(vm.getStorageId());
 };
 
+CodeBootVM.prototype.clearAllStorage = function () {
+
+    var vm = this;
+
+    localStorage.clear();
+};
+
 CodeBootVM.prototype.saveSession = function () {
 
     var vm = this;
@@ -64,7 +71,7 @@ CodeBootVM.prototype.serializeState = function () {
             history: undefined
         },
         lang: vm.lang.getId() + '-' + vm.level,
-        devMode: vm.devMode,
+//        authoringMode: vm.authoringMode,
         showLineNumbers: vm.showLineNumbers,
         largeFont: vm.largeFont,
         animationSpeed: vm.animationSpeed,
@@ -113,7 +120,7 @@ CodeBootVM.prototype.restoreState = function (state) {
     }) || failed;
 
     failed = cb_internal_attempt(function () {
-        vm.setLang(state.lang || 'js-novice');
+        vm.setLang(state.lang || vm.cb.defaultLang);
         vm.setLangUI();
     }) || failed;
 

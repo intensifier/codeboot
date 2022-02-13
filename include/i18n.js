@@ -217,6 +217,50 @@ CodeBootVM.prototype.translateDict = {
         'fr': 'Cloner',
     },
 
+    'Content authoring': {
+        'fr': 'Création de contenu',
+    },
+
+    'Return to student mode': {
+        'fr': 'Revenir au mode étudiant',
+    },
+
+    'The license file is invalid or corrupted': {
+        'fr': 'Le fichier de license est invalide ou corrompu',
+    },
+
+    'Full window': {
+        'fr': 'Pleine fenêtre',
+    },
+
+    'Floating window': {
+        'fr': 'Fenêtre flottante',
+    },
+
+    'Hide codeBoot': {
+        'fr': 'Cacher codeBoot',
+    },
+
+    'Bundle to clipboard': {
+        'fr': 'Empaqueter au presse-papier',
+    },
+
+    'Web app': {
+        'fr': 'App web',
+    },
+
+    'Single-step': {
+        'fr': 'Pas-à-pas',
+    },
+
+    'Animate': {
+        'fr': 'Animer',
+    },
+
+    'Execute': {
+        'fr': 'Exécuter',
+    },
+
 };
 
 CodeBootVM.prototype.translate = function (lang, str) {
@@ -233,6 +277,24 @@ CodeBootVM.prototype.translate = function (lang, str) {
     }
 
     return str;
+};
+
+CodeBootVM.prototype.polyglotHTML = function (str, args) {
+
+    var vm = this;
+
+    var HTML = '';
+
+    if (!args) args = [];
+
+    for (var i=0; i<vm.langsUI.length; i++) {
+        var lang = vm.langsUI[i][0];
+        HTML += '<span class="cb-' + lang + '">' +
+                CodeBoot.prototype.escapeHTML(vm.format(vm.translate(lang, str), args)) +
+                '</span>';
+    }
+
+    return HTML;
 };
 
 CodeBootVM.prototype.polyglotHTML = function (str, args) {
@@ -287,5 +349,43 @@ CodeBootVM.prototype.tformat = function (str) {
 
     var vm = this;
 
-    return vm.format(vm.translate('fr', str), arguments);
+    var lang = vm.root.getAttribute('lang');
+    
+    return vm.format(vm.translate(lang, str), arguments);
+};
+
+CodeBootVM.prototype.setUILanguageFromBrowser = function () {
+
+    var vm = this;
+
+    var languages = navigator.languages;
+    var lang = null;
+
+    for (var i=vm.langsUI.length-1; i>=0; i--) {
+        var langUI = vm.langsUI[i][0];
+        for (var j=0; j<languages.length; j++) {
+            if (langUI === languages[j]) {
+                lang = langUI;
+                break;
+            }
+        }
+    }
+
+    if (lang === null) {
+        for (var i=vm.langsUI.length-1; i>=0; i--) {
+            var langUI = vm.langsUI[i][0];
+            for (var j=0; j<languages.length; j++) {
+                if (languages[j].indexOf(langUI+'-') === 0) {
+                    lang = langUI;
+                    break;
+                }
+            }
+        }
+    }
+
+    if (lang === null) {
+        lang = 'en';
+    }
+
+    vm.setAttribute('lang', lang);
 };

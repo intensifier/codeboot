@@ -163,16 +163,26 @@ CodeBootFile.prototype.setReadOnly = function (readOnly) {
     file.fe.setReadOnly(readOnly);
 };
 
-CodeBootFile.prototype.toURL = function (isolated) {
+CodeBootFile.prototype.toURL = function (isolated, activated) {
 
     var file = this;
-    var fs = file.fs;
-    var vm = fs.vm;
 
-    var cmds = ['F' + toSafeBase64(file.filename) + ',' +
-                toSafeBase64(file.getContent())];
+    if (!file.fs.vm.allowURLCreation()) return null;
 
-    return vm.commandsToURL(cmds, isolated);
+    return file.fs.vm.commandsToURL([file.toCommand(activated)], isolated);
+};
+
+CodeBootFile.prototype.toCommand = function (activated) {
+
+    var file = this;
+
+    if (activated === undefined) {
+        activated = file.fe.isActivated();
+    }
+
+    return CodeBoot.prototype.fileToCommand(activated,
+                                            file.filename,
+                                            file.getContent())
 };
 
 function CodeBootFileSystem(vm) {
@@ -227,12 +237,14 @@ CodeBootFileSystem.prototype.setupTabDragAndDrop = function (fileTab, fe) {
         var dt = event.dataTransfer;
         dt.effectAllowed = 'copyMove';
         fileTab.classList.add('cb-dragging');
-        fileTab.setAttribute('data-cb-dragstart', '');
-        var shareableData = file.getShareableData();
+        var url = file.toURL(false);
+        var shareableData = file.getShareableData(url);
         for (var i=0; i<shareableData.length; i++) {
+            console.log(shareableData[i][0] + ' = ' + shareableData[i][1]);
             dt.setData(shareableData[i][0], shareableData[i][1]);
         }
         dt.setData('text/codeboot-file-name', file.filename);
+        if (url) fileTab.setAttribute('data-cb-dragstart', '');
     }
 
     function handleDragEnd(event) {
@@ -268,8 +280,8 @@ CodeBootFileSystem.prototype.setupTabDragAndDrop = function (fileTab, fe) {
             if (vm.editable) {
                 vm.handleDrop(event);
             }
-            event.preventDefault();
         } else {
+            event.preventDefault();
             var parent = fileTab.parentNode;
             var index = Array.prototype.indexOf.call(parent.childNodes, fileTab);
             var fem = fs.fem;
@@ -502,21 +514,6 @@ CodeBootFileSystem.prototype.rebuildFileMenu = function () {
 
         newFile.addEventListener('click', function (event) {
             fs.newFile();
-        });
-
-        var resetFS = fs.newMenuItem(elem,
-                                     'cb-reset-filesystem dropdown-item',
-                                     vm.polyglotHTML('Reset filesystem'));
-
-        elem.appendChild(resetFS);
-
-        resetFS.addEventListener('click', function (event) {
-            vm.confirmHTML(vm.polyglotHTML('Reset filesystem? This cannot be undone.'),
-                           function (yes) {
-                               if (yes) {
-                                   fs.init();
-                               }
-                           });
         });
 
         fs.addDividerToMenu(elem);
@@ -760,15 +757,19 @@ CodeBootFile.prototype.toHTMLText = function (fontSize, fontFamily) {
                 var tokenType = t.type;
                 if (tokenType) {
 
-                    var elem = document.querySelectorAll('.cm-'+tokenType);
-                    var css = '';
-                    var compStyle = window.getComputedStyle(elem[0], null);
+                    var elem = document.querySelector('.cm-'+tokenType);
+                    if (elem) {
+                        var css = '';
+                        var compStyle = window.getComputedStyle(elem, null);
 
-                    styles.forEach(function (style) {
-                        css += style + ':' + compStyle.getPropertyValue(style) + ';';
-                    });
+                        styles.forEach(function (style) {
+                            css += style + ':' + compStyle.getPropertyValue(style) + ';';
+                        });
 
-                    HTMLText += '<span style="' + css + '">';
+                        HTMLText += '<span style="' + css + '">';
+                    } else {
+                        HTMLText += '<span>';
+                    }
                 } else {
                     HTMLText += '<span>';
                 }
@@ -781,7 +782,7 @@ CodeBootFile.prototype.toHTMLText = function (fontSize, fontFamily) {
     }
 };
 
-CodeBootFile.prototype.getShareableData = function (fontSize, fontFamily) {
+CodeBootFile.prototype.getShareableData = function (url, fontSize, fontFamily) {
 
     var file = this;
     var fe = file.fe;
@@ -789,8 +790,6 @@ CodeBootFile.prototype.getShareableData = function (fontSize, fontFamily) {
     var content = file.getContent();
     var result = [];
     var ext = file.extension(filename);
-
-    var url = file.toURL(false);
 
     if (fontSize === void 0) {
         fontSize = '18px';
@@ -801,7 +800,7 @@ CodeBootFile.prototype.getShareableData = function (fontSize, fontFamily) {
     } else {
         var HTMLText = file.toHTMLText(fontSize, fontFamily);
         if (HTMLText !== null) {
-            if (url !== null) {
+            if (url) {
                 var link = '<a href="' + url + '"';
                 if (fontSize !== '') {
                     link += ' style="font-size:' + fontSize + ';"';
@@ -813,11 +812,11 @@ CodeBootFile.prototype.getShareableData = function (fontSize, fontFamily) {
         }
     }
 
-    content = (url !== null ? url + '\n' : '') + filename + '\n\n' + content;
+    content = (url ? url + '\n' : '') + filename + '\n\n' + content;
 
     result.push(['text/plain', content]);
 
-    if (url !== null) {
+    if (url) {
         result.push(['text/uri-list', url]);
     }
 

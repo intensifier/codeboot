@@ -67,6 +67,7 @@ include/codemirror-5.56.0/mode/python/python.js \
 include/jspreadsheet-4.9.11/dist/jspreadsheet.js \
 include/jsuites-4.9.34/dist/jsuites.js \
 include/jsrsasign-8.0.20/jsrsasign-all-min.js \
+include/lzma-js-2.3.2/lzma_worker-min.js \
 include/download.js \
 include/lang.js \
 include/lang/js/num.js \

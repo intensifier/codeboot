@@ -72,15 +72,16 @@ CodeBootVM.prototype.codeHighlight = function (loc, cssClass, markEnd) {
     return { textEditor: textEditor, all: allMarker, eol: eol, end: endMarker };
 };
 
+/*deprecated
 function editor_URL(content, filename) {
 
     var site = document.location.origin +
                document.location.pathname.replace(/\/[^/]*$/g,'');
 
     return site + '/query.cgi?' + 'REPLAY=' +
-           btoa(encode_utf8(('@C' +
-                             (filename === void 0 ? '' : (filename + '@0')) +
-                             content + '@E').replace(/\n/g,'@N')));
+           btoa(encodeUTF8(('@C' +
+                            (filename === void 0 ? '' : (filename + '@0')) +
+                            content + '@E').replace(/\n/g,'@N')));
 }
 
 CodeBootVM.prototype.query = function (query) {
@@ -92,59 +93,6 @@ CodeBootVM.prototype.query = function (query) {
     vm.replay_command_index = 0;
     vm.replay_parameters = [];
 };
-
-function encode_utf8(str) {
-    return unescape(encodeURIComponent(str));
-}
-
-function decode_utf8(str) {
-    return decodeURIComponent(escape(str));
-}
-
-function toSafeBase64(str) {
-    return convertToSafeBase64(btoa(unescape(encodeURIComponent(str))));
-}
-
-function toSafeBase64FromUint8Array(bytes) {
-    var str = '';
-    var len = bytes.byteLength;
-    for (var i=0; i<len; i++) {
-        str += String.fromCharCode(bytes[i]);
-    }
-    return convertToSafeBase64(btoa(str));
-}
-
-function fromSafeBase64(b64) {
-//    console.log(b64);
-    return decodeURIComponent(escape(atob(convertFromSafeBase64(b64))));
-}
-
-function fromSafeBase64ToUint8Array(b64) {
-//    console.log(b64);
-    var str = atob(convertFromSafeBase64(b64));
-    var len = str.length;
-    var bytes = new Uint8Array(len);
-    for (var i=0; i<len; i++) {
-        bytes[i] = str.charCodeAt(i);
-    }
-    return bytes;
-}
-
-function convertToSafeBase64(b64) {
-    return b64.replace(/\+/g,'-').replace(/\//g,'_');
-}
-
-function convertFromSafeBase64(b64) {
-    return b64.replace(/-/g,'+').replace(/_/g,'/');
-}
-
-function toUint8Array(str) {
-    return new TextEncoder().encode(str);
-}
-
-function fromUint8Array(arr) {
-    return new TextDecoder().decode(arr);
-}
 
 CodeBootVM.prototype.handle_query = function () {
 
@@ -160,7 +108,7 @@ CodeBootVM.prototype.handle_query = function () {
         setTimeout(function () { vm.replay(); }, 100);
     } else if (query && query.slice(0, 7) === 'REPLAY=') {
 
-        vm.replay_command = decode_utf8(atob(query.slice(7)));
+        vm.replay_command = decodeUTF8(atob(query.slice(7)));
         vm.replay_command_index = 0;
         vm.replay_syntax = 2;
 
@@ -285,6 +233,7 @@ CodeBootVM.prototype.replay = function () {
         }
     }
 };
+*/
 
 CodeBootVM.prototype.showTryMeTooltip = function () {
 
@@ -1340,14 +1289,14 @@ CodeBootVM.prototype.exec_continue = function (delay) {
         lang.continueExecution(stepChunk, delay);
     }
     catch (e) {
-        vm.updatePlayground();
+        vm.updateUI();
         //console.log(e);
         vm.showReason(e);
         vm.stop(null);
         return;
     }
 
-    vm.updatePlayground();
+    vm.updateUI();
 
     /*
       if (vm.ui.mode === vm.modeStepping()) {

@@ -49,3 +49,5 @@ CodeBoot.prototype.signAlgorithm = 'SHA256withRSA';
 CodeBoot.prototype.isolatedSubdomain = 'app.';
 
 CodeBoot.prototype.homeDomain = 'codeboot.org';
+
+CodeBoot.prototype.defaultLang = 'py-novice';
