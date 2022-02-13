@@ -117,15 +117,11 @@ body {
 /* codeBoot VM */
 
 .cb-vm {
-//    all: initial;
-//    font-family: Helvetica;
-//    overflow: hidden;
+    all: initial;
+    font-family: Helvetica;
     display: flex;
     flex-direction: column;
     border-radius: var(--cb-main-border-radius);
-//    text-align: left;
-//    z-index: 10;
-//    width: 100%;
 }
 
 pre.cb-vm {
@@ -135,6 +131,8 @@ pre.cb-vm {
 .cb-vm[data-cb-hidden] {
     display: none;
 }
+
+/* Floating  */
 
 .cb-vm[data-cb-floating] {
     position: absolute;
@@ -148,16 +146,13 @@ pre.cb-vm {
 .cb-vm:not([data-cb-show-footer]) > div.cb-footer,
 .cb-vm:not([data-cb-show-console]) > div > div.cb-console,
 .cb-vm:not([data-cb-show-repl-container]) > div > div > div.cb-repl-container,
-.cb-vm:not([data-cb-show-playground]) > div > div > div.cb-playground {
-    display: none;
-}
-
+.cb-vm:not([data-cb-show-playground]) > div > div > div.cb-playground,
 /* Hide splitters when nothing to split */
-
 .cb-vm:not([data-cb-show-console]) > div.cb-v-panes > div.cb-pane-splitter,
 .cb-vm:not([data-cb-show-playground]) > div.cb-body > div.cb-h-panes > div.cb-pane-splitter {
     display: none;
 }
+
 
 .cb-header {
     height: 130px;
@@ -167,10 +162,13 @@ pre.cb-vm {
 
 .cb-body {
 /*    height: 100%; */
-    width: 100%;
+    /* width: 100%; */
 /*    background-color: red; */
+    height: calc(100% - 80px);
     margin: 0;
 }
+
+/* Console and playground */
 
 .cb-v-panes > .cb-console.cb-pane-rigid { /* for highest specificity */
     height: var(--cb-console-height);
@@ -182,50 +180,12 @@ pre.cb-vm {
     min-width: var(--cb-playground-min-width);
 }
 
-.cb-vm[data-cb-show-header] .cb-console {
-/*    height: 5.5em; */
-}
-
-.cb-repl-container {
-    margin: 0;
-}
-
-.cb-vm[data-cb-show-header] .cb-repl-container {
-/*    max-height: 7.5em; */
-}
-
 .cb-repl-container .CodeMirror {
     height: 100%;
 }
 
-.cb-repl-container .CodeMirror-scroll {
-//    max-height: var(--cb-console-height);
-}
-
-.cb-vm[data-cb-show-header] .cb-repl-container .CodeMirror-scroll {
-/*    max-height: 5.5em; */
-}
-
-.cb-exec-controls-buttons .cb-button.btn-secondary,
-.cb-exec-controls-buttons .cb-button.btn-secondary:focus,
-.cb-exec-controls-buttons .cb-button.btn-secondary:active {
-    background-color: #f6f6f6;
-}
-
-.cb-exec-controls-buttons .cb-button.btn-secondary:hover {
-    background-color: #e0e0e0;
-}
-
-.cb-navbar-controls {
-    background-color: var(--cb-navbar-color);
-    border-radius: var(--cb-main-border-radius) var(--cb-main-border-radius) 0 0;
-}
-
-.cb-vm[data-cb-isolated] .cb-navbar-controls {
-    background-color: var(--cb-navbar-color-isolated);
-}
-
 .cb-repl-container {
+    margin: 0;
     border: 0;
     border-radius: var(--cb-container-border-radius);
     margin: var(--cb-margin) 0 0 var(--cb-margin);
@@ -245,6 +205,27 @@ pre.cb-vm {
     position: relative;
     overflow: hidden;
     margin: var(--cb-margin) var(--cb-margin) 0 0;
+}
+
+/* Exec buttons */
+
+.cb-exec-controls-buttons .cb-button.btn-secondary,
+.cb-exec-controls-buttons .cb-button.btn-secondary:focus,
+.cb-exec-controls-buttons .cb-button.btn-secondary:active {
+    background-color: #f6f6f6;
+}
+
+.cb-exec-controls-buttons .cb-button.btn-secondary:hover {
+    background-color: #e0e0e0;
+}
+
+.cb-navbar-controls {
+    background-color: var(--cb-navbar-color);
+    border-radius: var(--cb-main-border-radius) var(--cb-main-border-radius) 0 0;
+}
+
+.cb-vm[data-cb-isolated] .cb-navbar-controls {
+    background-color: var(--cb-navbar-color-isolated);
 }
 
 .cb-vm > .cb-exec-controls > .cb-exec-controls-buttons .cb-button.btn-secondary,
@@ -285,6 +266,8 @@ pre.cb-vm {
     background-color: var(--cb-focus-repl-navbar-controls-hover-color-isolated);
 }
 
+/* Editor and file */
+
 .cb-editors {
 //    max-height: 100%;
 //    height: calc(100% - 13.5em - 55px);
@@ -301,21 +284,19 @@ pre.cb-vm {
 
 .cb-file-tabs {
 /*    height: 2.8em; */
-//    overflow: hidden;
+    /* overflow: hidden; */
     text-overflow: ellipsis;
     flex-wrap: nowrap;
     flex-shrink: 0;
-    height: 1.75em;/***************************/
+    height: 1.75em;
 }
-
-/**************************/
 ul.cb-file-tabs {
     display: inline-flex;
 }
 
 .cb-file-tab {
-//    overflow: hidden; /***************************/
-//    margin-left: var(--cb-container-border-radius);
+    /* overflow: hidden; /\***************************\/ */
+    /* margin-left: var(--cb-container-border-radius); */
     height: 1.75em;/***************************/
 }
 
@@ -335,8 +316,9 @@ ul.cb-file-tabs {
 }
 
 .cb-file-container {
-    max-height: calc(100%);
-    height: calc(100% - 1.5em);
+    /* max-height: calc(100%); */
+    height: 100%;
+    /* height:100%; */
     margin: 0;
     padding: 0;
     border: 3px solid var(--cb-file-container-color);
@@ -352,18 +334,18 @@ ul.cb-file-tabs {
 
 .cb-vm:not([data-cb-show-header]):not([data-cb-show-footer]) .cb-file-container .CodeMirror-scroll {
 /*    height: 100%; */
-//    width: 100%;
+    /* width: 100%; */
 }
 
 /* Hide scrollbars for webkit */
 .cb-vm .cb-file-container .CodeMirror-scroll::-webkit-scrollbar {
-//  display: none;
+  /* display: none; */
 }
 
 /* Hide scrollbar for IE, Edge and Firefox */
 .cb-vm .cb-file-container .CodeMirror-scroll {
-//  -ms-overflow-style: none;  /* IE and Edge */
-//  scrollbar-width: none;  /* Firefox */
+  /* -ms-overflow-style: none;  /\* IE and Edge *\/ */
+  /* scrollbar-width: none;  /\* Firefox *\/ */
 }
 
 .cb-footer {
@@ -790,9 +772,8 @@ ul.cb-file-tabs {
 /*--------------------------- CodeMirror ----------------------------*/
 
 
-.cb-file-container .CodeMirror {
-//    height: 100%;
-    height: calc(100% - 40px); /* ugly hack to prevent navigation bar from scrolling off screen */
+.CodeMirror {
+    height: 100%;
 }
 
 .cb-vm .CodeMirror-matchingbracket {
@@ -946,8 +927,8 @@ ul.cb-file-tabs {
 .cb-v-panes,
 .cb-h-panes {
     display: flex;
-    width: 100%;
-    height: 100%;
+    /* width: 100%; */
+    /* height: 100%; */
 }
 
 .cb-v-panes > .cb-pane-rigid {
@@ -1496,4 +1477,14 @@ table.cb-keybindings td:nth-child(1)
 
 .grammar-token.multi {
     display: block;
+}
+
+/* Old, unused */
+
+.cb-repl-container .CodeMirror-scroll {
+//    max-height: var(--cb-console-height);
+}
+
+.cb-vm[data-cb-show-header] .cb-repl-container .CodeMirror-scroll {
+/*    max-height: 5.5em; */
 }
