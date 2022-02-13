@@ -4110,6 +4110,7 @@ pre.cb-vm {
 /*    background-color: red; */
     height: calc(100% - 80px);
     margin: 0;
+    /* overflow-y:hidden; */
 }
 
 /* Console and playground */
@@ -4633,10 +4634,6 @@ ul.cb-file-tabs {
 }
 
 /*-------------------------- file editors ---------------------------*/
-
-.cb-editors{
-    overflow-x:hidden;
-}
 
 .cb-editors > .nav-tabs {
     border-bottom: 0;
