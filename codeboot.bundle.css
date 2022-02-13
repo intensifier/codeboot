@@ -4061,15 +4061,15 @@ body {
 /* codeBoot VM */
 
 .cb-vm {
-//    all: initial;
-//    font-family: Helvetica;
-//    overflow: hidden;
+    all: initial;
+    font-family: Helvetica;
+    /* overflow: hidden; */
     display: flex;
     flex-direction: column;
     border-radius: var(--cb-main-border-radius);
-//    text-align: left;
-//    z-index: 10;
-//    width: 100%;
+    /* text-align: left; */
+    /* z-index: 10; */
+    /* width: 100%; */
 }
 
 pre.cb-vm {
@@ -4110,8 +4110,8 @@ pre.cb-vm {
 }
 
 .cb-body {
-/*    height: 100%; */
-    width: 100%;
+   /* min-height: 100vh; */
+    /* width: 100%; */
 /*    background-color: red; */
     margin: 0;
 }
@@ -4278,25 +4278,37 @@ ul.cb-file-tabs {
     filter: invert(0%);
 }
 
-.cb-file-container {
-    max-height: calc(100%);
-    height: calc(100% - 1.5em);
+.cb-editors > .cb-file-container {
+    /* max-height: calc(100%); */
+    /* height: calc(100% - 1.5em); */
     margin: 0;
     padding: 0;
     border: 3px solid var(--cb-file-container-color);
     border-radius: var(--cb-container-border-radius);
     background-color: var(--cb-file-container-color);
-    position: relative;
+    flex-grow: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    align-item:stretch;
+    /* position: relative; */
     display: none;
 }
 
-.cb-file-container.active {
-    display: inline;
+.cb-file-container > .CodeMirror {
+    flex-grow : 1;
+    /* min-height: 100px; */
+    height: 1px;
+}
+
+.cb-editors > .cb-file-container.active {
+    display: flex;
+
 }
 
 .cb-vm:not([data-cb-show-header]):not([data-cb-show-footer]) .cb-file-container .CodeMirror-scroll {
 /*    height: 100%; */
-//    width: 100%;
+    /* width: 100%; */
 }
 
 /* Hide scrollbars for webkit */
@@ -4752,8 +4764,8 @@ ul.cb-file-tabs {
 
 
 .cb-file-container .CodeMirror {
-//    height: 100%;
-    height: calc(100% - 40px); /* ugly hack to prevent navigation bar from scrolling off screen */
+/* //    height: 100%; */
+    /* height: calc(100% - 40px); /\* ugly hack to prevent navigation bar from scrolling off screen *\/ */
 }
 
 .cb-vm .CodeMirror-matchingbracket {
