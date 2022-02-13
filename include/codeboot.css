@@ -656,6 +656,7 @@ ul.cb-file-tabs {
 }
 
 [data-cb-context-bundle-web-app] > svg,
+[data-cb-context-bundle-files] > svg,
 [data-cb-context-bundle-step] > svg,
 [data-cb-context-bundle-animate] > svg,
 [data-cb-context-bundle-execute] > svg {
