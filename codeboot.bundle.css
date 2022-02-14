@@ -4307,7 +4307,7 @@ ul.cb-file-tabs {
 }
 
 .cb-editors > .cb-file-container.active {
-    display: block;
+    display: flex;
 
 }
 
