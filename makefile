@@ -26,6 +26,12 @@ include/lang/py/style.js:
 serve: bundle
 	$(PYTHON38) -m http.server 8999 --bind 127.0.0.1
 
+codeboot.bundle.min.js: codeboot.bundle.js
+	uglifyjs codeboot.bundle.js --compress > codeboot.bundle.min.js
+
+bundle-min: codeboot.bundle.css codeboot.bundle.min.js
+	inliner index.html | sed -e '1h;2,$$H;$$!d;g' -re 's/~~s\ns~~/ nl /g' > codeboot_bundle.html
+
 bundle: codeboot.bundle.css codeboot.bundle.js
 	# requires inliner (from npm) installed
 	# The 'sed' call solves a weird bug from inliner (https://github.com/remy/inliner/issues/221)
